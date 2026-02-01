@@ -66,21 +66,57 @@ const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTran
   };
 
   const handleDownloadPDF = async () => {
-    const element = document.getElementById('financial-report-print');
-    if (!element) return;
-    element.classList.remove('hidden');
-    const { jsPDF } = (window as any).jspdf;
-    try {
-        const canvas = await (window as any).html2canvas(element, { scale: 2, useCORS: true });
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`Relatorio_Financeiro_SUSU_${filterMonth}_${filterYear}.pdf`);
-    } catch (err) { alert("Erro ao gerar PDF."); }
-    finally { element.classList.add('hidden'); }
-  };
+  const element = document.getElementById('print-area-financial');
+  if (!element) return;
+  
+  element.classList.remove('hidden');
+  element.style.display = 'block';
+  element.style.position = 'absolute';
+  element.style.left = '-9999px';
+  element.style.width = '210mm';
+  
+  const { jsPDF } = (window as any).jspdf;
+  try {
+    const canvas = await (window as any).html2canvas(element, { 
+      scale: 3,
+      useCORS: true,
+      logging: false,
+      windowWidth: 794,
+      windowHeight: element.scrollHeight
+    });
+    
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = 210;
+    const pdfHeight = 297;
+    const imgWidth = pdfWidth;
+    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+    
+    let heightLeft = imgHeight;
+    let position = 0;
+    
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pdfHeight;
+    
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+    }
+    
+    pdf.save(`relatorio-financeiro-${new Date().toISOString().split('T')[0]}.pdf`);
+  } catch (err) {
+    console.error("PDF Error:", err);
+    alert("Erro ao gerar o relatório.");
+  } finally {
+    element.style.display = '';
+    element.style.position = '';
+    element.style.left = '';
+    element.style.width = '';
+    element.classList.add('hidden');
+  }
+};
 
   const StatCard = ({ title, value, sub, icon, color, type, isMoney = true }: any) => (
     <div onClick={() => type && setDetailModal({ isOpen: true, type })} className={`bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm transition-all group relative overflow-hidden ${type ? 'cursor-pointer hover:shadow-xl hover:-translate-y-1' : ''}`}>
