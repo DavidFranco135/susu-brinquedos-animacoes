@@ -39,18 +39,43 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
   }, [formData.toyIds, toys]);
 
   const handleDownloadPDF = async (elementId: string, filename: string) => {
-    const element = document.getElementById(elementId);
-    if (!element) return;
-    const { jsPDF } = (window as any).jspdf;
-    const canvas = await (window as any).html2canvas(element, { scale: 2, useCORS: true });
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const imgProps = pdf.getImageProperties(imgData);
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-    pdf.save(`${filename}.pdf`);
-  };
+  const element = document.getElementById(elementId);
+  if (!element) return;
+
+  const { jsPDF } = (window as any).jspdf;
+
+  const canvas = await (window as any).html2canvas(element, {
+    scale: 2,
+    useCORS: true,
+    scrollY: -window.scrollY
+  });
+
+  const imgData = canvas.toDataURL('image/png');
+
+  const pdf = new jsPDF('p', 'mm', 'a4');
+
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+
+  const imgWidth = pageWidth;
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+  let heightLeft = imgHeight;
+  let position = 0;
+
+  pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+  heightLeft -= pageHeight;
+
+  while (heightLeft > 0) {
+    position -= pageHeight;
+    pdf.addPage();
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+  }
+
+  pdf.save(`${filename}.pdf`);
+};
+
 
   const handleSendWhatsApp = (budget: Rental) => {
     const customer = customers.find(c => c.id === budget.customerId);
