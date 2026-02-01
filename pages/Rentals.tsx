@@ -21,6 +21,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
   const [editingRental, setEditingRental] = useState<Rental | null>(null);
   const [viewTab, setViewTab] = useState<'Mês' | 'Ano' | 'Lista'>('Mês');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const userStr = localStorage.getItem('susu_user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
@@ -104,25 +105,83 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
   }, [formData.toyIds, toys]);
 
   const handleDownloadPDF = async (elementId: string, filename: string) => {
-    const element = document.getElementById(elementId);
-    if (!element) return;
+    setIsGeneratingPDF(true);
     
-    const isHidden = element.classList.contains('hidden');
-    if (isHidden) element.classList.remove('hidden');
-
-    const { jsPDF } = (window as any).jspdf;
     try {
-        const canvas = await (window as any).html2canvas(element, { scale: 2, useCORS: true });
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`${filename}.pdf`);
+      const element = document.getElementById(elementId);
+      if (!element) {
+        alert('Erro: Elemento não encontrado');
+        return;
+      }
+      
+      const isHidden = element.classList.contains('hidden');
+      if (isHidden) {
+        element.style.display = 'block';
+        element.style.position = 'absolute';
+        element.style.left = '-9999px';
+        element.style.top = '0';
+      }
+
+      // Aguardar renderização
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const canvas = await (window as any).html2canvas(element, {
+        scale: 3,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: element.scrollWidth || 1200,
+        height: element.scrollHeight
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const { jsPDF } = (window as any).jspdf;
+      
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
+
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const margin = 10;
+      
+      const imgWidth = pageWidth - (margin * 2);
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      if (imgHeight <= pageHeight - (margin * 2)) {
+        pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight);
+      } else {
+        let heightLeft = imgHeight;
+        let position = margin;
+        
+        pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+        heightLeft -= (pageHeight - margin);
+        
+        while (heightLeft > 0) {
+          position = heightLeft - imgHeight + margin;
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
+        }
+      }
+
+      pdf.save(`${filename}.pdf`);
     } catch (err) {
-        alert("Erro ao gerar PDF.");
+      console.error('Erro ao gerar PDF:', err);
+      alert("Erro ao gerar o PDF. Tente novamente.");
     } finally {
-        if (isHidden) element.classList.add('hidden');
+      const element = document.getElementById(elementId);
+      if (element) {
+        element.style.display = '';
+        element.style.position = '';
+        element.style.left = '';
+        element.style.top = '';
+      }
+      setIsGeneratingPDF(false);
     }
   };
 
@@ -244,8 +303,8 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
           <p className="text-slate-500 font-medium">Controle de logística e agendamentos.</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <button onClick={handleDownloadReportPDF} className="flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-600 px-8 py-4 rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
-            <Download size={20} /> Relatório PDF
+          <button onClick={handleDownloadReportPDF} disabled={isGeneratingPDF} className="flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-600 px-8 py-4 rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+            <Download size={20} /> {isGeneratingPDF ? 'Gerando...' : 'Relatório PDF'}
           </button>
           <button onClick={() => handleOpenModal()} className="flex items-center justify-center gap-3 bg-gradient-to-br from-blue-500 to-blue-700 text-white px-8 py-4 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl shadow-blue-100 hover:scale-105 transition-all">
             <Plus size={20} strokeWidth={3} /> Nova Reserva
@@ -607,8 +666,8 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
             </div>
 
             <div className="p-10 bg-slate-50 border-t flex justify-end gap-4 print:hidden">
-              <button onClick={() => handleDownloadPDF('os-print', `OS-${selectedForOS.customerName}`)} className="flex-1 md:flex-none flex items-center justify-center gap-3 bg-slate-900 text-white px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl active:scale-95">
-                <Download size={20}/> Baixar PDF
+              <button onClick={() => handleDownloadPDF('os-print', `OS-${selectedForOS.customerName}`)} disabled={isGeneratingPDF} className="flex-1 md:flex-none flex items-center justify-center gap-3 bg-slate-900 text-white px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                <Download size={20}/> {isGeneratingPDF ? 'Gerando PDF...' : 'Baixar PDF'}
               </button>
             </div>
           </div>
