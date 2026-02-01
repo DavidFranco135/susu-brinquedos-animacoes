@@ -1,160 +1,182 @@
-import React, { useState, useRef } from 'react';
-import {
-  FileSignature,
-  Receipt,
-  Download,
-  X,
-  Eye,
-  Upload,
-  Image as ImageIcon
-} from 'lucide-react';
-import { Rental, Customer, CompanySettings, User } from '../types';
+
+import React, { useState } from 'react';
+import { Users, Plus, Search, Edit, Trash2, X, Building2, Download } from 'lucide-react';
+import { Customer, User } from '../types';
 
 interface Props {
-  type: 'contract' | 'receipt';
-  rentals: Rental[];
   customers: Customer[];
-  company: CompanySettings;
+  setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
 }
 
-const DocumentsPage: React.FC<Props> = ({ type, rentals, customers, company }) => {
-  const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [contractImage, setContractImage] = useState<string | null>(null);
-
-  const [contractTerms, setContractTerms] = useState(
-    company.contractTerms ||
-      `1. OBJETO: A CONTRATADA compromete-se a disponibilizar os brinquedos.
-2. RESPONSABILIDADE: O CONTRATANTE assume responsabilidade por danos.
-3. CANCELAMENTO: Cancelamentos com menos de 48h não têm estorno.`
-  );
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
+const CustomersPage: React.FC<Props> = ({ customers, setCustomers }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
   const userStr = localStorage.getItem('susu_user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
+  
+  const [formData, setFormData] = useState<Partial<Customer>>({ 
+    name: '', 
+    phone: '', 
+    address: '', 
+    isCompany: false, 
+    cnpj: '',
+    cpf: '',
+    notes: '' 
+  });
 
-  const Title = type === 'contract' ? 'Contrato de Locação' : 'Recibo de Pagamento';
-  const Icon = type === 'contract' ? FileSignature : Receipt;
+  const filtered = customers.filter(c => 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (c.cnpj && c.cnpj.includes(searchTerm)) ||
+    (c.cpf && c.cpf.includes(searchTerm))
+  );
 
-  // ✅ GERA PDF DO CONTAINER A4 REAL (FORA DO MODAL)
   const handleDownloadPDF = async () => {
-    const element = document.getElementById('pdf-root');
+    const element = document.getElementById('print-area-customers');
     if (!element) return;
-
-    const html2pdf = (window as any).html2pdf;
-
-    await html2pdf()
-      .set({
-        margin: 15,
-        filename: `${type}-${selectedRental?.customerName}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      })
-      .from(element)
-      .save();
+    
+    element.classList.remove('hidden');
+    
+    const { jsPDF } = (window as any).jspdf;
+    try {
+        const canvas = await (window as any).html2canvas(element, { scale: 2, useCORS: true });
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save(`base-clientes-susu.pdf`);
+    } catch (err) {
+        console.error("PDF Error:", err);
+        alert("Erro ao gerar o relatório.");
+    } finally {
+        element.classList.add('hidden');
+    }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => setContractImage(reader.result as string);
-    reader.readAsDataURL(file);
+  const handleOpenModal = (cust?: Customer) => {
+    if (cust) {
+      setEditingCustomer(cust);
+      setFormData(cust);
+    } else {
+      setEditingCustomer(null);
+      setFormData({ name: '', phone: '', address: '', isCompany: false, cnpj: '', cpf: '', notes: '' });
+    }
+    setIsModalOpen(true);
   };
 
-  // ✅ CONTEÚDO DO PDF (A4 REAL, SEM LIMITES)
-  const PdfContent = () => {
-    if (!selectedRental) return null;
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingCustomer) {
+      setCustomers(prev => prev.map(c => c.id === editingCustomer.id ? { ...c, ...formData } as Customer : c));
+    } else {
+      const newC: Customer = { 
+        id: `c${Date.now()}`, 
+        createdAt: new Date().toISOString(), 
+        ...(formData as any) 
+      };
+      setCustomers(prev => [...prev, newC]);
+    }
+    setIsModalOpen(false);
+  };
 
-    return (
-      <div
-        id="pdf-root"
-        className="bg-white text-slate-800 font-serif space-y-8 p-12"
-        style={{ width: '210mm', minHeight: '297mm' }}
-      >
-        <div className="text-center space-y-2 border-b pb-6">
-          <h1 className="text-2xl font-black uppercase">{Title}</h1>
-          <p className="text-xs">
-            {company.name} — CNPJ: {company.cnpj}
-          </p>
-          <p className="text-xs">{company.address}</p>
-        </div>
-
-        <div className="text-sm space-y-2">
-          <p><strong>Cliente:</strong> {selectedRental.customerName}</p>
-          <p>
-            <strong>Documento:</strong>{' '}
-            {customers.find(c => c.id === selectedRental.customerId)?.cpf ||
-              customers.find(c => c.id === selectedRental.customerId)?.cnpj ||
-              'Não informado'}
-          </p>
-          <p><strong>Endereço do evento:</strong> {selectedRental.eventAddress}</p>
-        </div>
-
-        <div className="bg-slate-100 p-6 rounded-xl text-sm">
-          <p><strong>Valor total:</strong> R$ {selectedRental.totalValue.toLocaleString('pt-BR')}</p>
-          <p><strong>Entrada paga:</strong> R$ {selectedRental.entryValue.toLocaleString('pt-BR')}</p>
-        </div>
-
-        <div className="text-sm whitespace-pre-line leading-relaxed">
-          {type === 'contract'
-            ? contractTerms
-            : `Declaramos que recebemos o valor acima referente à locação.`}
-        </div>
-
-        {contractImage && (
-          <img src={contractImage} className="w-full rounded-xl border mt-6" />
-        )}
-
-        <div className="pt-32 grid grid-cols-2 gap-16 text-center text-xs font-bold uppercase">
-          <div className="border-t pt-2">{company.name}</div>
-          <div className="border-t pt-2">{selectedRental.customerName}</div>
-        </div>
-      </div>
-    );
+  const handleDelete = (id: string) => {
+      if(confirm("Deseja realmente excluir este cliente?")) {
+          setCustomers(prev => prev.filter(c => c.id !== id));
+      }
   };
 
   return (
     <div className="space-y-6">
-      {/* HEADER */}
-      <header className="flex justify-between items-center print:hidden">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-blue-600 text-white rounded-xl">
-            <Icon size={24} />
-          </div>
-          <h1 className="text-2xl font-bold">{Title}s</h1>
+      <header className="flex flex-col md:flex-row justify-between items-center gap-4 print:hidden">
+        <div>
+            <h1 className="text-4xl font-black text-slate-800 tracking-tight">Base de Clientes</h1>
+            <p className="text-slate-500 font-medium">Gestão centralizada de contatos.</p>
+        </div>
+        <div className="flex gap-3">
+            <button onClick={handleDownloadPDF} className="bg-white border border-slate-200 text-slate-600 px-8 py-4 rounded-3xl font-black text-sm uppercase tracking-widest shadow-sm hover:bg-slate-50 transition-all">
+                <Download size={18} className="inline mr-2"/> Exportar PDF
+            </button>
+            <button onClick={() => handleOpenModal()} className="bg-gradient-to-br from-blue-500 to-blue-700 text-white px-8 py-4 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl shadow-blue-100 hover:scale-105 transition-all">
+                <Plus size={20} className="inline mr-2"/> Novo Cliente
+            </button>
         </div>
       </header>
 
-      {/* LISTA */}
-      <div className="bg-white rounded-xl border print:hidden">
-        <table className="w-full">
-          <thead className="bg-slate-50 text-xs uppercase">
+      <div id="print-area-customers" className="hidden bg-white p-12 text-slate-900">
+          <div className="border-b-4 border-slate-900 pb-8 mb-8 flex justify-between items-center">
+              <div>
+                  <h1 className="text-3xl font-black uppercase tracking-tight">Listagem Geral de Clientes</h1>
+                  <p className="text-sm font-bold mt-2 uppercase tracking-widest opacity-60">SUSU Animações e Brinquedos</p>
+              </div>
+              <div className="w-20 h-20 rounded-[28px] overflow-hidden border-2 border-slate-900">
+                  {user?.profilePhotoUrl ? <img src={user.profilePhotoUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-100"/>}
+              </div>
+          </div>
+          <table className="w-full text-[10px] text-left border-collapse">
+              <thead>
+                  <tr className="border-b-2 border-slate-900 uppercase font-black">
+                      <th className="py-2">Nome / Razão</th>
+                      <th className="py-2">WhatsApp</th>
+                      <th className="py-2">Documento</th>
+                      <th className="py-2">Endereço Principal</th>
+                  </tr>
+              </thead>
+              <tbody className="divide-y">
+                  {filtered.map(c => (
+                      <tr key={c.id}>
+                          <td className="py-3 font-black text-slate-900">{c.name}</td>
+                          <td className="py-3 font-bold">{c.phone}</td>
+                          <td className="py-3 uppercase opacity-60">{c.isCompany ? c.cnpj : c.cpf}</td>
+                          <td className="py-3 text-[9px] leading-tight max-w-[200px]">{c.address}</td>
+                      </tr>
+                  ))}
+              </tbody>
+          </table>
+          <div className="mt-10 border-t pt-4 text-[9px] font-black uppercase opacity-40 text-center">
+              Gerado por {user?.name} em {new Date().toLocaleDateString('pt-BR')}
+          </div>
+      </div>
+
+      <div className="bg-white rounded-3xl border p-2 flex gap-4 print:hidden shadow-sm">
+        <div className="relative flex-1">
+          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <input type="text" placeholder="Buscar por nome ou documento..." className="w-full pl-16 pr-6 py-4 bg-transparent outline-none font-bold text-slate-700 text-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[40px] border border-slate-100 overflow-hidden shadow-sm print:hidden">
+        <table className="w-full text-left">
+          <thead className="bg-slate-50/50 text-[11px] font-black uppercase text-slate-400 tracking-wider">
             <tr>
-              <th className="p-4">Data</th>
-              <th className="p-4">Cliente</th>
-              <th className="p-4">Valor</th>
-              <th className="p-4 text-right">Ações</th>
+                <th className="px-10 py-5">Identificação</th>
+                <th className="px-8 py-5">WhatsApp</th>
+                <th className="px-8 py-5">Documento</th>
+                <th className="px-8 py-5 text-right">Ações</th>
             </tr>
           </thead>
-          <tbody>
-            {rentals.map(r => (
-              <tr key={r.id} className="border-t">
-                <td className="p-4">{r.date}</td>
-                <td className="p-4">{r.customerName}</td>
-                <td className="p-4 font-bold">
-                  R$ {r.totalValue.toLocaleString('pt-BR')}
+          <tbody className="divide-y text-sm">
+            {filtered.map(c => (
+              <tr key={c.id} className="hover:bg-slate-50/50 transition-colors group">
+                <td className="px-10 py-6">
+                    <div className="flex items-center gap-4">
+                        <div className={`p-3 rounded-2xl ${c.isCompany ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                            {c.isCompany ? <Building2 size={18}/> : <Users size={18}/>}
+                        </div>
+                        <div>
+                          <p className="font-black text-slate-800 uppercase tracking-tight">{c.name}</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Membro desde {new Date(c.createdAt).toLocaleDateString()}</p>
+                        </div>
+                    </div>
                 </td>
-                <td className="p-4 text-right">
-                  <button
-                    onClick={() => setSelectedRental(r)}
-                    className="text-blue-600 font-bold flex gap-2 items-center"
-                  >
-                    <Eye size={16} /> Visualizar
-                  </button>
+                <td className="px-8 py-6 text-slate-600 font-black">{c.phone}</td>
+                <td className="px-8 py-6 uppercase font-bold text-slate-400 text-xs tracking-widest">{c.isCompany ? c.cnpj : c.cpf}</td>
+                <td className="px-8 py-6 text-right">
+                  <div className="flex justify-end gap-2">
+                      <button onClick={() => handleOpenModal(c)} className="p-3 bg-slate-100 text-slate-500 hover:bg-blue-600 hover:text-white rounded-2xl transition-all"><Edit size={16}/></button>
+                      <button onClick={() => handleDelete(c.id)} className="p-3 bg-slate-100 text-red-400 hover:bg-red-600 hover:text-white rounded-2xl transition-all"><Trash2 size={16}/></button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -162,40 +184,58 @@ const DocumentsPage: React.FC<Props> = ({ type, rentals, customers, company }) =
         </table>
       </div>
 
-      {/* MODAL (APENAS VISUALIZAÇÃO) */}
-      {selectedRental && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 print:hidden">
-          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl">
-            <div className="p-6 border-b flex justify-between">
-              <h2 className="font-bold text-xs uppercase">Visualização</h2>
-              <button onClick={() => setSelectedRental(null)}>
-                <X />
-              </button>
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <form onSubmit={handleSubmit} className="bg-white w-full max-lg rounded-[40px] p-10 space-y-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-black text-slate-800 tracking-tight">{editingCustomer ? 'Ficha do Cliente' : 'Novo Cliente'}</h2>
+                <button type="button" onClick={()=>setIsModalOpen(false)} className="p-4 bg-slate-50 text-slate-400 hover:text-slate-800 rounded-2xl transition-all"><X size={20}/></button>
+            </div>
+            
+            <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-3xl border border-slate-100">
+                <label className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl cursor-pointer font-black text-[10px] uppercase tracking-widest transition-all bg-white border border-blue-100 text-blue-600">
+                    <input type="radio" className="hidden" checked={!formData.isCompany} onChange={()=>setFormData({...formData, isCompany: false})} /> Pessoa Física
+                </label>
+                <label className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl cursor-pointer font-black text-[10px] uppercase tracking-widest transition-all bg-white border border-slate-100 text-slate-400">
+                    <input type="radio" className="hidden" checked={formData.isCompany} onChange={()=>setFormData({...formData, isCompany: true})} /> Empresa (PJ)
+                </label>
             </div>
 
-            <div className="p-6 text-sm">
-              <p><strong>Cliente:</strong> {selectedRental.customerName}</p>
-              <p><strong>Valor:</strong> R$ {selectedRental.totalValue.toLocaleString('pt-BR')}</p>
+            <div className="space-y-4">
+                <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome / Razão Social</label>
+                    <input required className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} />
+                </div>
+                
+                {formData.isCompany ? (
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CNPJ</label>
+                        <input className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold" value={formData.cnpj} onChange={e=>setFormData({...formData, cnpj: e.target.value})} placeholder="00.000.000/0001-00" />
+                    </div>
+                ) : (
+                  <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CPF</label>
+                        <input className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold" value={formData.cpf} onChange={e=>setFormData({...formData, cpf: e.target.value})} placeholder="000.000.000-00" />
+                    </div>
+                )}
+
+                <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">WhatsApp</label>
+                    <input required className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold" value={formData.phone} onChange={e=>setFormData({...formData, phone: e.target.value})} />
+                </div>
+                
+                <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Endereço Principal</label>
+                    <textarea required rows={2} className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold resize-none" value={formData.address} onChange={e=>setFormData({...formData, address: e.target.value})} />
+                </div>
             </div>
 
-            <div className="p-6 border-t flex justify-end">
-              <button
-                onClick={handleDownloadPDF}
-                className="bg-slate-900 text-white px-8 py-4 rounded-xl flex gap-2 items-center font-bold"
-              >
-                <Download size={18} /> Baixar PDF
-              </button>
-            </div>
-          </div>
+            <button type="submit" className="w-full bg-blue-600 text-white py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">Salvar Cliente</button>
+          </form>
         </div>
       )}
-
-      {/* 🔒 PDF INVISÍVEL (FORA DO MODAL) */}
-      <div className="hidden">
-        <PdfContent />
-      </div>
     </div>
   );
 };
 
-export default DocumentsPage;
+export default CustomersPage;
