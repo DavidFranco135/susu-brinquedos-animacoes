@@ -12,10 +12,10 @@ interface Props {
   setRentals: React.Dispatch<React.SetStateAction<Rental[]>>;
   transactions: FinancialTransaction[];
   setTransactions: React.Dispatch<React.SetStateAction<FinancialTransaction[]>>;
-  toys: Toy[];
+  toys?: Toy[]; // <- Tornei opcional com ?
 }
 
-const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTransactions, toys }) => {
+const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTransactions, toys = [] }) => { // <- valor padrão []
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [detailModal, setDetailModal] = useState<{ isOpen: boolean; type: 'INCOME' | 'EXPENSE' | 'PROFIT' | 'PENDING' | null }>({
@@ -129,7 +129,7 @@ const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTran
       .map(([toyId, count]) => {
         const toy = toys.find(t => t.id === toyId);
         return {
-          name: toy?.name || 'Desconhecido',
+          name: toy?.name || `Brinquedo #${toyId.slice(-4)}`,
           quantidade: count,
           receita: (toy?.price || 0) * count
         };
@@ -504,154 +504,164 @@ const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTran
         </div>
 
         {/* Status das Reservas */}
-        <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl"><PieIcon size={20}/></div>
-              <div>
-                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Status das Reservas</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Distribuição por Status</p>
+        {reservationStatus.length > 0 && (
+          <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl"><PieIcon size={20}/></div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Status das Reservas</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Distribuição por Status</p>
+                </div>
               </div>
             </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={reservationStatus}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={100}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {reservationStatus.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={reservationStatus}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {reservationStatus.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+        )}
 
         {/* Brinquedos Mais Alugados */}
-        <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><Package size={20}/></div>
-              <div>
-                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Top Brinquedos</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Mais Alugados no Período</p>
+        {topToys.length > 0 && (
+          <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl"><Package size={20}/></div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Top Brinquedos</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Mais Alugados no Período</p>
+                </div>
               </div>
             </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={topToys} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis type="number" tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 'bold' }} />
+                <YAxis dataKey="name" type="category" tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 'bold' }} width={100} />
+                <Tooltip />
+                <Bar dataKey="quantidade" fill="#10b981" radius={[0, 8, 8, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={topToys} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis type="number" tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 'bold' }} />
-              <YAxis dataKey="name" type="category" tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 'bold' }} width={100} />
-              <Tooltip />
-              <Bar dataKey="quantidade" fill="#10b981" radius={[0, 8, 8, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        )}
 
         {/* Despesas por Categoria */}
-        <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-red-50 text-red-600 rounded-2xl"><PieIcon size={20}/></div>
-              <div>
-                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Despesas por Categoria</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Distribuição de Custos</p>
+        {expensesByCategory.length > 0 && (
+          <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-red-50 text-red-600 rounded-2xl"><PieIcon size={20}/></div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Despesas por Categoria</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Distribuição de Custos</p>
+                </div>
               </div>
             </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={expensesByCategory}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }: any) => `${name} ${percent}%`}
+                  outerRadius={100}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {expensesByCategory.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={['#ef4444', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'][index % 5]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={expensesByCategory}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, percent }: any) => `${name} ${percent}%`}
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {expensesByCategory.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={['#ef4444', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'][index % 5]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+        )}
 
         {/* Métodos de Pagamento */}
-        <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl"><Wallet size={20}/></div>
-              <div>
-                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Métodos de Pagamento</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Preferências dos Clientes</p>
+        {paymentMethods.length > 0 && (
+          <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl"><Wallet size={20}/></div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Métodos de Pagamento</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Preferências dos Clientes</p>
+                </div>
               </div>
             </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={paymentMethods}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, value }: any) => `${name}: ${value}`}
+                  outerRadius={100}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {paymentMethods.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={paymentMethods}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, value }: any) => `${name}: ${value}`}
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {paymentMethods.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+        )}
 
         {/* Taxa de Conversão */}
-        <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl"><CheckCircle2 size={20}/></div>
-              <div>
-                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Taxa de Conversão</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Confirmados vs Pendentes</p>
+        {conversionRate.length > 0 && (
+          <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl"><CheckCircle2 size={20}/></div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Taxa de Conversão</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Confirmados vs Pendentes</p>
+                </div>
               </div>
             </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={conversionRate}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, value, percent }: any) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                  outerRadius={100}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {conversionRate.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={conversionRate}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, value, percent }: any) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {conversionRate.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+        )}
 
       </div>
 
