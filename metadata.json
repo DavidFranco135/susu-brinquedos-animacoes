@@ -1,0 +1,7 @@
+{
+  "name": "SUSU Animações - Gestão de Locações",
+  "description": "Sistema completo para gestão de locação de brinquedos e eventos, com controle de clientes, estoque, agenda e orçamentos.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
