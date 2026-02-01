@@ -24,8 +24,61 @@ const DocumentsPage: React.FC<Props> = ({ type, rentals, customers, company }) =
   const Icon = type === 'contract' ? FileSignature : Receipt;
 
   const handleDownloadPDF = async (elementId: string, filename: string) => {
-    const element = document.getElementById(elementId);
-    if (!element) return;
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  
+  // Prepara o elemento para renderização
+  const originalDisplay = element.style.display;
+  const originalPosition = element.style.position;
+  const originalLeft = element.style.left;
+  const originalWidth = element.style.width;
+  
+  element.style.display = 'block';
+  element.style.position = 'absolute';
+  element.style.left = '-9999px';
+  element.style.width = '210mm';
+  
+  const { jsPDF } = (window as any).jspdf;
+  try {
+    const canvas = await (window as any).html2canvas(element, { 
+      scale: 3,
+      useCORS: true,
+      logging: false,
+      windowWidth: 794,
+      windowHeight: element.scrollHeight
+    });
+    
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = 210;
+    const pdfHeight = 297;
+    const imgWidth = pdfWidth;
+    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+    
+    let heightLeft = imgHeight;
+    let position = 0;
+    
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pdfHeight;
+    
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+    }
+    
+    pdf.save(`${filename}.pdf`);
+  } catch (err) {
+    console.error("PDF Error:", err);
+    alert("Erro ao gerar o documento.");
+  } finally {
+    element.style.display = originalDisplay;
+    element.style.position = originalPosition;
+    element.style.left = originalLeft;
+    element.style.width = originalWidth;
+  }
+};
     const { jsPDF } = (window as any).jspdf;
     const canvas = await (window as any).html2canvas(element, { scale: 2, useCORS: true });
     const imgData = canvas.toDataURL('image/png');
