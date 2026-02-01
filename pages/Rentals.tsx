@@ -3,6 +3,12 @@ import { useLocation } from 'react-router-dom';
 import { Plus, X, ChevronLeft, ChevronRight, Edit3, Calendar as CalendarIcon, List, CalendarDays, BarChart3, Clock, CheckCircle2, MapPin, UserPlus, FileSpreadsheet, Download, Phone, Share2, MessageCircle, Trash2, ClipboardList } from 'lucide-react';
 import { Rental, RentalStatus, Customer, Toy, User, UserRole, PaymentMethod } from '../types';
 
+interface AdditionalItem {
+  id: string;
+  description: string;
+  value: number;
+}
+
 interface RentalsProps {
   rentals: Rental[];
   setRentals: React.Dispatch<React.SetStateAction<Rental[]>>;
@@ -22,6 +28,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
   const [viewTab, setViewTab] = useState<'Mês' | 'Ano' | 'Lista'>('Mês');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [additionalItems, setAdditionalItems] = useState<AdditionalItem[]>([]);
 
   const userStr = localStorage.getItem('susu_user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
@@ -43,6 +50,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
     if (rental) {
       setEditingRental(rental);
       setFormData(rental);
+      setAdditionalItems((rental as any).additionalItems || []);
     } else {
       setEditingRental(null);
       setFormData({
@@ -56,6 +64,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
         paymentMethod: 'PIX',
         eventAddress: ''
       });
+      setAdditionalItems([]);
     }
     setIsModalOpen(true);
   };
@@ -98,11 +107,28 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
 
   useEffect(() => {
     const selectedToys = toys.filter(t => formData.toyIds?.includes(t.id));
-    const total = selectedToys.reduce((acc, t) => acc + (t.price || 0), 0);
+    const toysTotal = selectedToys.reduce((acc, t) => acc + (t.price || 0), 0);
+    const additionalTotal = additionalItems.reduce((acc, item) => acc + item.value, 0);
+    const total = toysTotal + additionalTotal;
+    
     if (total !== formData.totalValue) {
       setFormData(prev => ({ ...prev, totalValue: total }));
     }
-  }, [formData.toyIds, toys]);
+  }, [formData.toyIds, toys, additionalItems]);
+
+  const addAdditionalItem = () => {
+    setAdditionalItems([...additionalItems, { id: `item${Date.now()}`, description: '', value: 0 }]);
+  };
+
+  const updateAdditionalItem = (id: string, field: 'description' | 'value', value: string | number) => {
+    setAdditionalItems(additionalItems.map(item => 
+      item.id === id ? { ...item, [field]: value } : item
+    ));
+  };
+
+  const removeAdditionalItem = (id: string) => {
+    setAdditionalItems(additionalItems.filter(item => item.id !== id));
+  };
 
   const handleDownloadPDF = async (elementId: string, filename: string) => {
     setIsGeneratingPDF(true);
@@ -122,7 +148,6 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
         element.style.top = '0';
       }
 
-      // Aguardar renderização
       await new Promise(resolve => setTimeout(resolve, 100));
 
       const canvas = await (window as any).html2canvas(element, {
@@ -220,6 +245,14 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
     const formattedDate = new Date(rental.date + 'T00:00:00').toLocaleDateString('pt-BR');
     const pending = rental.totalValue - rental.entryValue;
 
+    let additionalText = '';
+    if ((rental as any).additionalItems && (rental as any).additionalItems.length > 0) {
+      additionalText = '\n🎁 *Serviços Adicionais:*\n' + 
+        (rental as any).additionalItems.map((item: AdditionalItem) => 
+          `   • ${item.description} - R$ ${item.value.toLocaleString('pt-BR')}`
+        ).join('\n');
+    }
+
     const text = encodeURIComponent(
       `📋 *CONFIRMAÇÃO DE RESERVA - SUSU ANIMAÇÕES*\n\n` +
       `Olá, *${rental.customerName}*! Tudo bem?\n` +
@@ -227,7 +260,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
       `📅 *Data:* ${formattedDate}\n` +
       `⏰ *Horário:* ${rental.startTime} às ${rental.endTime}\n` +
       `📍 *Local:* ${rental.eventAddress}\n` +
-      `🎮 *Brinquedos:* ${toysNames}\n\n` +
+      `🎮 *Brinquedos:* ${toysNames}${additionalText}\n\n` +
       `💰 *Valor Total:* R$ ${rental.totalValue.toLocaleString('pt-BR')}\n` +
       `💳 *Sinal Pago:* R$ ${rental.entryValue.toLocaleString('pt-BR')}\n` +
       `💵 *Saldo Restante:* *R$ ${pending.toLocaleString('pt-BR')}*\n\n` +
@@ -289,7 +322,8 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
       entryValue: Number(formData.entryValue) || 0,
       paymentMethod: formData.paymentMethod as PaymentMethod,
       status: formData.status!,
-    };
+      additionalItems: additionalItems.filter(item => item.description.trim() !== '')
+    } as any;
 
     setRentals(prev => editingRental ? prev.map(r => r.id === editingRental.id ? newRental : r) : [...prev, newRental]);
     setIsModalOpen(false);
@@ -531,6 +565,55 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
                 </div>
               </div>
 
+              {/* NOVA SEÇÃO: Itens Adicionais */}
+              <div className="md:col-span-2 space-y-4">
+                <div className="flex justify-between items-center">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Serviços Adicionais</label>
+                  <button type="button" onClick={addAdditionalItem} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all">
+                    <Plus size={14} /> Adicionar
+                  </button>
+                </div>
+                
+                {additionalItems.length > 0 && (
+                  <div className="space-y-3 p-6 bg-slate-50 rounded-[32px] border-2 border-slate-100">
+                    {additionalItems.map((item) => (
+                      <div key={item.id} className="flex gap-3 items-start bg-white p-4 rounded-2xl border border-slate-100">
+                        <div className="flex-1 space-y-2">
+                          <input 
+                            type="text" 
+                            placeholder="Descrição do serviço"
+                            className="w-full px-4 py-2 bg-slate-50 border-0 rounded-xl font-bold text-sm"
+                            value={item.description}
+                            onChange={e => updateAdditionalItem(item.id, 'description', e.target.value)}
+                          />
+                          <input 
+                            type="number" 
+                            step="0.01"
+                            placeholder="Valor (R$)"
+                            className="w-full px-4 py-2 bg-slate-50 border-0 rounded-xl font-bold text-sm"
+                            value={item.value === 0 ? '' : item.value}
+                            onChange={e => updateAdditionalItem(item.id, 'value', e.target.value === '' ? 0 : Number(e.target.value))}
+                          />
+                        </div>
+                        <button 
+                          type="button" 
+                          onClick={() => removeAdditionalItem(item.id)}
+                          className="p-2 bg-red-50 text-red-400 hover:bg-red-600 hover:text-white rounded-xl transition-all"
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {additionalItems.length === 0 && (
+                  <div className="p-6 bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-200 text-center">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Nenhum serviço adicional</p>
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-2">
                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Sinal Recebido (R$)</label>
                 <input 
@@ -642,6 +725,20 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
                     })}
                   </div>
                </div>
+
+               {(selectedForOS as any).additionalItems && (selectedForOS as any).additionalItems.length > 0 && (
+                 <div className="mt-10 space-y-6">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-3">Serviços Adicionais</p>
+                   <div className="grid grid-cols-1 gap-4">
+                     {(selectedForOS as any).additionalItems.map((item: AdditionalItem) => (
+                       <div key={item.id} className="flex items-center justify-between p-5 bg-blue-50 border-2 border-blue-100 rounded-3xl">
+                         <p className="font-black text-slate-900 uppercase text-sm">{item.description}</p>
+                         {pdfIncludeValues && <p className="font-black text-blue-600">R$ {item.value.toLocaleString('pt-BR')}</p>}
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+               )}
 
                {pdfIncludeValues && (
                 <div className="mt-12 p-8 bg-slate-900 rounded-[40px] flex justify-between items-center text-white">
