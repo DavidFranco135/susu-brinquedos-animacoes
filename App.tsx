@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApp, getApps } from "firebase/app";
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
@@ -44,11 +44,11 @@ const firebaseConfig = {
   measurementId: "G-3VGKJGWFSY"
 };
 
-const app = initializeApp(firebaseConfig);
+// Inicialização segura do Firebase (Singleton)
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Componente de Login agora recebe o logotipo da empresa como prop
 const Login: React.FC<{ companyLogo?: string }> = ({ companyLogo }) => {
   const [email, setEmail] = useState('admsusu@gmail.com');
   const [password, setPassword] = useState('123456');
@@ -68,10 +68,10 @@ const Login: React.FC<{ companyLogo?: string }> = ({ companyLogo }) => {
           await createUserWithEmailAndPassword(auth, email, password);
           return;
         } catch (createErr: any) {
-          setError('Erro ao criar conta administrativa. Verifique o console do Firebase.');
+          setError('Erro ao criar conta administrativa.');
         }
       } else {
-        setError('E-mail ou senha inválidos. Verifique suas credenciais.');
+        setError('E-mail ou senha inválidos.');
       }
     } finally {
       setLoading(false);
@@ -84,7 +84,7 @@ const Login: React.FC<{ companyLogo?: string }> = ({ companyLogo }) => {
         <div className="text-center mb-10 w-full flex flex-col items-center">
           <div className="w-32 h-32 mb-6 flex items-center justify-center overflow-hidden">
              {companyLogo ? (
-               <img src={companyLogo} alt="Logo" className="w-full h-full object-contain" />
+               <img src={companyLogo} alt="Logo" className="w-full h-full object-contain transition-all duration-500" />
              ) : (
                <div className="w-full h-full bg-slate-100 flex items-center justify-center rounded-3xl">
                  <UserIcon size={40} className="text-slate-300" />
@@ -92,7 +92,7 @@ const Login: React.FC<{ companyLogo?: string }> = ({ companyLogo }) => {
              )}
           </div>
           <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase tracking-widest">Painel Administrativo</h2>
-          <p className="text-slate-400 mt-1 font-medium text-sm">Controle sua diversão em um só lugar</p>
+          <p className="text-slate-400 mt-1 font-medium text-sm text-center">Controle sua diversão em um só lugar</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6 w-full">
           {error && <div className="p-4 bg-red-50 text-red-500 text-xs font-bold rounded-2xl text-center">{error}</div>}
@@ -131,26 +131,15 @@ const App: React.FC = () => {
     contractTerms: 'Termos padrão...'
   });
 
-  // Efeito para sincronizar LOGO do sistema com o Navegador e Celular
+  // Efeito para sincronizar a logo da empresa com o navegador (Favicon e Apple Icon)
   useEffect(() => {
     if (company.logoUrl) {
-      // Atualiza Favicon
       const favicon = document.getElementById('dynamic-favicon') as HTMLLinkElement;
       if (favicon) favicon.href = company.logoUrl;
-      
-      // Atualiza Apple Touch Icon (Mobile)
       const appleIcon = document.getElementById('dynamic-apple-icon') as HTMLLinkElement;
       if (appleIcon) appleIcon.href = company.logoUrl;
     }
   }, [company.logoUrl]);
-
-  // Carregamento de dados da empresa (PÚBLICO - ANTES DO LOGIN)
-  useEffect(() => {
-    const unsubCompany = onSnapshot(doc(db, "settings", "company"), (docSnap) => {
-      if (docSnap.exists()) setCompany(docSnap.data() as CompanyType);
-    });
-    return () => unsubCompany();
-  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -200,12 +189,16 @@ const App: React.FC = () => {
       setTransactions(snap.docs.map(d => ({ ...d.data(), id: d.id } as FinancialTransaction)));
     });
 
+    const unsubCompany = onSnapshot(doc(db, "settings", "company"), (docSnap) => {
+      if (docSnap.exists()) setCompany(docSnap.data() as CompanyType);
+    });
+
     const unsubCategories = onSnapshot(doc(db, "settings", "categories"), (docSnap) => {
       if (docSnap.exists()) setCategories(docSnap.data().list || []);
     });
 
     return () => {
-      unsubToys(); unsubCustomers(); unsubRentals(); unsubFinancial(); unsubCategories();
+      unsubToys(); unsubCustomers(); unsubRentals(); unsubFinancial(); unsubCompany(); unsubCategories();
     };
   }, [user]);
 
