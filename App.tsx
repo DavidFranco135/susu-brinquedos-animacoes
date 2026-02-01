@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { initializeApp, getApp, getApps } from "firebase/app";
+import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
@@ -32,7 +32,7 @@ import BudgetsPage from './pages/BudgetsPage';
 import DocumentsPage from './pages/DocumentsPage';
 import PublicRentalSummary from './pages/PublicRentalSummary';
 import { Customer, Toy, Rental, User, UserRole, FinancialTransaction, CompanySettings as CompanyType } from './types';
-import { Loader2, User as UserIcon } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBUvwY-e7h0KZyFJv7n0ignpzlMUGJIurU",
@@ -44,12 +44,11 @@ const firebaseConfig = {
   measurementId: "G-3VGKJGWFSY"
 };
 
-// Inicialização segura do Firebase (Singleton)
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const Login: React.FC<{ companyLogo?: string }> = ({ companyLogo }) => {
+const Login: React.FC = () => {
   const [email, setEmail] = useState('admsusu@gmail.com');
   const [password, setPassword] = useState('123456');
   const [error, setError] = useState('');
@@ -68,10 +67,10 @@ const Login: React.FC<{ companyLogo?: string }> = ({ companyLogo }) => {
           await createUserWithEmailAndPassword(auth, email, password);
           return;
         } catch (createErr: any) {
-          setError('Erro ao criar conta administrativa.');
+          setError('Erro ao criar conta administrativa. Verifique o console do Firebase.');
         }
       } else {
-        setError('E-mail ou senha inválidos.');
+        setError('E-mail ou senha inválidos. Verifique suas credenciais.');
       }
     } finally {
       setLoading(false);
@@ -81,18 +80,9 @@ const Login: React.FC<{ companyLogo?: string }> = ({ companyLogo }) => {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-[40px] shadow-2xl p-10 border border-slate-100 flex flex-col items-center animate-in fade-in zoom-in duration-500">
-        <div className="text-center mb-10 w-full flex flex-col items-center">
-          <div className="w-32 h-32 mb-6 flex items-center justify-center overflow-hidden">
-             {companyLogo ? (
-               <img src={companyLogo} alt="Logo" className="w-full h-full object-contain transition-all duration-500" />
-             ) : (
-               <div className="w-full h-full bg-slate-100 flex items-center justify-center rounded-3xl">
-                 <UserIcon size={40} className="text-slate-300" />
-               </div>
-             )}
-          </div>
+        <div className="text-center mb-10 w-full flex flex-col items-center pt-4">
           <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase tracking-widest">Painel Administrativo</h2>
-          <p className="text-slate-400 mt-1 font-medium text-sm text-center">Controle sua diversão em um só lugar</p>
+          <p className="text-slate-400 mt-1 font-medium text-sm">Controle sua diversão em um só lugar</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6 w-full">
           {error && <div className="p-4 bg-red-50 text-red-500 text-xs font-bold rounded-2xl text-center">{error}</div>}
@@ -130,16 +120,6 @@ const App: React.FC = () => {
     address: 'Rua das Festas, 123, São Paulo - SP',
     contractTerms: 'Termos padrão...'
   });
-
-  // Efeito para sincronizar a logo da empresa com o navegador (Favicon e Apple Icon)
-  useEffect(() => {
-    if (company.logoUrl) {
-      const favicon = document.getElementById('dynamic-favicon') as HTMLLinkElement;
-      if (favicon) favicon.href = company.logoUrl;
-      const appleIcon = document.getElementById('dynamic-apple-icon') as HTMLLinkElement;
-      if (appleIcon) appleIcon.href = company.logoUrl;
-    }
-  }, [company.logoUrl]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -230,7 +210,7 @@ const App: React.FC = () => {
         <Route path="/resumo/:id" element={<PublicRentalSummary rentals={rentals} toys={toys} company={company} />} />
         
         <Route path="*" element={
-          !user ? <Login companyLogo={company.logoUrl} /> : (
+          !user ? <Login /> : (
             <Layout user={user} onLogout={handleLogout} onUpdateUser={handleUpdateUser}>
               <Routes>
                 <Route path="/" element={user.role === UserRole.ADMIN ? <Dashboard rentals={rentals} toysCount={toys.length} transactions={transactions} /> : <Navigate to="/reservas" />} />
