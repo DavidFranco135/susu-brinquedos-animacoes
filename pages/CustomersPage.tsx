@@ -32,27 +32,89 @@ const CustomersPage: React.FC<Props> = ({ customers, setCustomers }) => {
     (c.cpf && c.cpf.includes(searchTerm))
   );
 
-  const handleDownloadPDF = async () => {
-  const element = document.getElementById('print-area-customers');
+  const handleDownloadPDF = async (elementId: string, filename: string) => {
+  const element = document.getElementById(elementId);
   if (!element) return;
   
+  // Detecta se é mobile
+  const isMobile = window.innerWidth < 768;
+  
+  // Mostra loading
+  const loadingDiv = document.createElement('div');
+  loadingDiv.id = 'pdf-loading';
+  loadingDiv.className = 'fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center';
+  loadingDiv.innerHTML = `
+    <div class="bg-white rounded-3xl p-8 text-center space-y-4">
+      <div class="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+      <p class="font-black text-slate-800 text-sm uppercase tracking-widest">Gerando PDF...</p>
+      <p class="text-xs text-slate-400">Isso pode levar alguns segundos</p>
+    </div>
+  `;
+  document.body.appendChild(loadingDiv);
+  
+  // Salva estilos originais
+  const originalStyles = {
+    display: element.style.display,
+    position: element.style.position,
+    left: element.style.left,
+    width: element.style.width,
+    maxWidth: element.style.maxWidth,
+    transform: element.style.transform,
+    overflow: element.style.overflow
+  };
+  
+  // Prepara elemento para renderização
   element.classList.remove('hidden');
   element.style.display = 'block';
   element.style.position = 'absolute';
   element.style.left = '-9999px';
-  element.style.width = '210mm';
+  element.style.top = '0';
+  element.style.width = '794px'; // Largura A4 em pixels (210mm)
+  element.style.maxWidth = '794px';
+  element.style.transform = 'scale(1)';
+  element.style.overflow = 'visible';
+  
+  // Aguarda fontes e imagens carregarem
+  await new Promise(resolve => setTimeout(resolve, isMobile ? 1000 : 500));
   
   const { jsPDF } = (window as any).jspdf;
+  
   try {
     const canvas = await (window as any).html2canvas(element, { 
-      scale: 3,
+      scale: isMobile ? 2 : 3, // Menor scale no mobile para economizar memória
       useCORS: true,
       logging: false,
+      width: 794,
       windowWidth: 794,
-      windowHeight: element.scrollHeight
+      windowHeight: element.scrollHeight,
+      scrollY: -window.scrollY,
+      scrollX: -window.scrollX,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      removeContainer: true,
+      imageTimeout: 0,
+      onclone: (clonedDoc) => {
+        const clonedElement = clonedDoc.getElementById(elementId);
+        if (clonedElement) {
+          // Remove elementos que podem causar problemas
+          clonedElement.querySelectorAll('button, .no-print').forEach(el => el.remove());
+          
+          // Ajusta fontes para melhor renderização
+          clonedElement.style.fontSmoothing = 'antialiased';
+          clonedElement.style.webkitFontSmoothing = 'antialiased';
+          
+          // Garante que textos não quebrem incorretamente
+          const textElements = clonedElement.querySelectorAll('p, span, div, h1, h2, h3, h4, h5, h6');
+          textElements.forEach(el => {
+            (el as HTMLElement).style.wordBreak = 'normal';
+            (el as HTMLElement).style.overflowWrap = 'normal';
+            (el as HTMLElement).style.whiteSpace = 'normal';
+          });
+        }
+      }
     });
     
-    const imgData = canvas.toDataURL('image/png');
+    const imgData = canvas.toDataURL('image/jpeg', 0.95); // JPEG com qualidade 95% (menor tamanho)
     const pdf = new jsPDF('p', 'mm', 'a4');
     const pdfWidth = 210;
     const pdfHeight = 297;
@@ -62,46 +124,76 @@ const CustomersPage: React.FC<Props> = ({ customers, setCustomers }) => {
     let heightLeft = imgHeight;
     let position = 0;
     
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    // Adiciona primeira página
+    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
     heightLeft -= pdfHeight;
     
+    // Adiciona páginas extras se necessário
     while (heightLeft > 0) {
       position = heightLeft - imgHeight;
       pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
       heightLeft -= pdfHeight;
     }
     
-    pdf.save(`base-clientes-susu.pdf`);
+    // Salva o PDF
+    if (isMobile) {
+      // No mobile, abre em nova aba para facilitar download
+      const pdfBlob = pdf.output('blob');
+      const url = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${filename}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } else {
+      pdf.save(`${filename}.pdf`);
+    }
+    
+    // Feedback de sucesso
+    loadingDiv.innerHTML = `
+      <div class="bg-white rounded-3xl p-8 text-center space-y-4">
+        <div class="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto">
+          <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+          </svg>
+        </div>
+        <p class="font-black text-slate-800 text-sm uppercase tracking-widest">PDF Gerado!</p>
+      </div>
+    `;
+    
+    setTimeout(() => loadingDiv.remove(), 1500);
+    
   } catch (err) {
     console.error("PDF Error:", err);
-    alert("Erro ao gerar o relatório.");
+    
+    // Mostra erro amigável
+    loadingDiv.innerHTML = `
+      <div class="bg-white rounded-3xl p-8 text-center space-y-4 max-w-sm">
+        <div class="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto">
+          <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </div>
+        <p class="font-black text-slate-800 text-sm uppercase tracking-widest">Erro ao gerar PDF</p>
+        <p class="text-xs text-slate-400">Tente novamente ou use um navegador diferente</p>
+        <button onclick="document.getElementById('pdf-loading').remove()" class="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold text-xs uppercase">
+          Fechar
+        </button>
+      </div>
+    `;
+    
   } finally {
-    element.style.display = '';
-    element.style.position = '';
-    element.style.left = '';
-    element.style.width = '';
-    element.classList.add('hidden');
+    // Restaura estilos originais
+    Object.keys(originalStyles).forEach(key => {
+      element.style[key] = originalStyles[key];
+    });
+    
+    if (element.classList.contains('hidden')) {
+      element.classList.add('hidden');
+    }
   }
 };
-    
-    const { jsPDF } = (window as any).jspdf;
-    try {
-        const canvas = await (window as any).html2canvas(element, { scale: 2, useCORS: true });
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`base-clientes-susu.pdf`);
-    } catch (err) {
-        console.error("PDF Error:", err);
-        alert("Erro ao gerar o relatório.");
-    } finally {
-        element.classList.add('hidden');
-    }
-  };
-
   const handleOpenModal = (cust?: Customer) => {
     if (cust) {
       setEditingCustomer(cust);
