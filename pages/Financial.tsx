@@ -1,8 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, 
-  BarChart, Bar, AreaChart, Area, PieChart, Pie, Legend, LineChart, Line,
-  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
+  BarChart, Bar, AreaChart, Area, PieChart, Pie, Legend
 } from 'recharts';
 import { Wallet, TrendingUp, TrendingDown, Plus, X, Filter, Download, DollarSign, ChevronRight, PieChart as PieIcon, Activity, BarChart3, Clock, CheckCircle2, AlertCircle, ArrowUpRight, Calendar, Package } from 'lucide-react';
 import { FinancialTransaction, Rental, RentalStatus, User, PaymentMethod, Toy } from '../types';
@@ -12,10 +11,16 @@ interface Props {
   setRentals: React.Dispatch<React.SetStateAction<Rental[]>>;
   transactions: FinancialTransaction[];
   setTransactions: React.Dispatch<React.SetStateAction<FinancialTransaction[]>>;
-  toys?: Toy[]; // <- Tornei opcional com ?
+  toys?: Toy[];
 }
 
-const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTransactions, toys = [] }) => { // <- valor padrão []
+const Financial: React.FC<Props> = ({ 
+  rentals = [], 
+  setRentals, 
+  transactions = [], 
+  setTransactions, 
+  toys = [] 
+}) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [detailModal, setDetailModal] = useState<{ isOpen: boolean; type: 'INCOME' | 'EXPENSE' | 'PROFIT' | 'PENDING' | null }>({
@@ -30,13 +35,16 @@ const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTran
   const userStr = localStorage.getItem('susu_user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
 
+  // Garantir que toys é sempre um array
+  const safeToys = Array.isArray(toys) ? toys : [];
+
   const filteredData = useMemo(() => {
     const yearMatch = (date: string) => date.startsWith(filterYear);
     const monthMatch = (date: string) => filterMonth === 'ALL' || date.includes(`-${filterMonth}-`);
     
     return {
-      rentals: rentals.filter(r => yearMatch(r.date) && monthMatch(r.date)),
-      transactions: transactions.filter(t => yearMatch(t.date) && monthMatch(t.date))
+      rentals: (rentals || []).filter(r => yearMatch(r.date) && monthMatch(r.date)),
+      transactions: (transactions || []).filter(t => yearMatch(t.date) && monthMatch(t.date))
     };
   }, [rentals, transactions, filterYear, filterMonth]);
 
@@ -68,8 +76,8 @@ const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTran
   const monthlyEvolution = useMemo(() => {
     const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
     return months.map(m => {
-      const monthRentals = rentals.filter(r => r.date.includes(`-${m}-`) && r.date.startsWith(filterYear));
-      const monthTransactions = transactions.filter(t => t.date.includes(`-${m}-`) && t.date.startsWith(filterYear));
+      const monthRentals = (rentals || []).filter(r => r.date.includes(`-${m}-`) && r.date.startsWith(filterYear));
+      const monthTransactions = (transactions || []).filter(t => t.date.includes(`-${m}-`) && t.date.startsWith(filterYear));
       
       let income = 0;
       monthRentals.forEach(r => {
@@ -85,7 +93,7 @@ const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTran
       const profit = income - expense;
       
       return {
-        month: new Date(2025, parseInt(m) - 1, 1).toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase(),
+        month: new Date(2025, parseInt(m) - 1, 1).toLocaleString('pt-BR', { month: 'short' }).toUpperCase(),
         receita: income,
         despesa: expense,
         lucro: profit
@@ -120,14 +128,16 @@ const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTran
     
     filteredData.rentals.forEach(r => {
       if (r.status === RentalStatus.CANCELLED) return;
-      r.toyIds.forEach(tid => {
-        toyCount[tid] = (toyCount[tid] || 0) + 1;
-      });
+      if (Array.isArray(r.toyIds)) {
+        r.toyIds.forEach(tid => {
+          toyCount[tid] = (toyCount[tid] || 0) + 1;
+        });
+      }
     });
     
     return Object.entries(toyCount)
       .map(([toyId, count]) => {
-        const toy = toys.find(t => t.id === toyId);
+        const toy = safeToys.find(t => t && t.id === toyId);
         return {
           name: toy?.name || `Brinquedo #${toyId.slice(-4)}`,
           quantidade: count,
@@ -136,7 +146,7 @@ const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTran
       })
       .sort((a, b) => b.quantidade - a.quantidade)
       .slice(0, 8);
-  }, [filteredData, toys]);
+  }, [filteredData, safeToys]);
 
   // 4. Despesas por Categoria
   const expensesByCategory = useMemo(() => {
@@ -191,7 +201,7 @@ const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTran
     });
     
     return last30Days.map(date => {
-      const dayRentals = rentals.filter(r => r.date === date && r.status !== RentalStatus.CANCELLED);
+      const dayRentals = (rentals || []).filter(r => r.date === date && r.status !== RentalStatus.CANCELLED);
       const revenue = dayRentals.reduce((acc, r) => {
         let val = r.entryValue || 0;
         if (r.status === RentalStatus.COMPLETED) val = r.totalValue;
