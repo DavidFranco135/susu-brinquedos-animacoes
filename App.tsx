@@ -30,7 +30,7 @@ import BudgetsPage from './pages/BudgetsPage';
 import DocumentsPage from './pages/DocumentsPage';
 import PublicRentalSummary from './pages/PublicRentalSummary';
 import { Customer, Toy, Rental, User, UserRole, FinancialTransaction, CompanySettings as CompanyType } from './types';
-import { User as UserIcon, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBUvwY-e7h0KZyFJv7n0ignpzlMUGJIurU",
@@ -82,18 +82,18 @@ const Login: React.FC = () => {
           <div style={{ width: '128px', height: '128px', minWidth: '128px' }} className="bg-slate-50 rounded-[40px] flex items-center justify-center mb-6 shadow-xl border-4 border-white overflow-hidden relative">
              <img src={displayPhoto} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} className="w-full h-full object-cover" />
           </div>
-          <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest">Painel Administrativo</h2>
+          <h2 className="text-xl font-black text-slate-800 uppercase tracking-widest brand-font">Painel Administrativo</h2>
           <p className="text-slate-400 mt-1 font-medium text-sm">SUSU Animações e Brinquedos</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6 w-full">
           {error && <div className="p-4 bg-red-50 text-red-500 text-xs font-bold rounded-2xl text-center">{error}</div>}
           <div className="space-y-1">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
-            <input type="email" required className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl outline-none font-bold" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input type="email" required className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl outline-none font-bold text-slate-700" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha</label>
-            <input type="password" required className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl outline-none font-bold" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input type="password" required className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl outline-none font-bold text-slate-700" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 uppercase tracking-widest text-sm flex items-center justify-center gap-3">
             {loading ? <Loader2 className="animate-spin" size={20}/> : 'Entrar no Sistema'}
@@ -113,21 +113,15 @@ const App: React.FC = () => {
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [categories, setCategories] = useState<string[]>(['Cama Elástica', 'Infláveis', 'Piscina de Bolinhas', 'Jogos', 'Geral']);
   const [company, setCompany] = useState<CompanyType>({
-    name: 'Susu Animações',
-    logoUrl: '',
-    address: '',
-    phone: '',
-    email: '',
-    contractTerms: ''
+    name: 'Susu Animações', logoUrl: '', address: '', phone: '', email: '', contractTerms: ''
   });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const cachedUser = localStorage.getItem('susu_user');
-        if (cachedUser) {
-          setUser(JSON.parse(cachedUser));
-        } else {
+        if (cachedUser) setUser(JSON.parse(cachedUser));
+        else {
           const newUser: User = {
             id: firebaseUser.uid,
             name: firebaseUser.displayName || 'Administrador',
@@ -145,33 +139,15 @@ const App: React.FC = () => {
       setAuthLoading(false);
     });
 
-    const qToys = query(collection(db, "toys"));
-    onSnapshot(qToys, (snap) => setToys(snap.docs.map(d => ({ id: d.id, ...d.data() } as Toy))));
-
-    const qRentals = query(collection(db, "rentals"), orderBy("date", "desc"));
-    onSnapshot(qRentals, (snap) => setRentals(snap.docs.map(d => ({ id: d.id, ...d.data() } as Rental))));
-
-    const qCust = query(collection(db, "customers"));
-    onSnapshot(qCust, (snap) => setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Customer))));
-
-    const qTrans = query(collection(db, "transactions"), orderBy("date", "desc"));
-    onSnapshot(qTrans, (snap) => setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as FinancialTransaction))));
-
-    onSnapshot(doc(db, "settings", "company"), (snap) => {
-      if (snap.exists()) setCompany(snap.data() as CompanyType);
-    });
-
-    onSnapshot(doc(db, "settings", "categories"), (snap) => {
-      if (snap.exists()) setCategories(snap.data().list || []);
-    });
+    onSnapshot(collection(db, "toys"), (snap) => setToys(snap.docs.map(d => ({ id: d.id, ...d.data() } as Toy))));
+    onSnapshot(query(collection(db, "rentals"), orderBy("date", "desc")), (snap) => setRentals(snap.docs.map(d => ({ id: d.id, ...d.data() } as Rental))));
+    onSnapshot(collection(db, "customers"), (snap) => setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Customer))));
+    onSnapshot(query(collection(db, "transactions"), orderBy("date", "desc")), (snap) => setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as FinancialTransaction))));
+    onSnapshot(doc(db, "settings", "company"), (snap) => snap.exists() && setCompany(snap.data() as CompanyType));
+    onSnapshot(doc(db, "settings", "categories"), (snap) => snap.exists() && setCategories(snap.data().list || []));
 
     return () => unsubscribe();
   }, []);
-
-  const handleUpdateUser = (updatedUser: User) => {
-    setUser(updatedUser);
-    localStorage.setItem('susu_user', JSON.stringify(updatedUser));
-  };
 
   if (authLoading) return <div className="h-screen w-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600" size={40} /></div>;
 
@@ -185,6 +161,7 @@ const App: React.FC = () => {
               <Routes>
                 <Route path="/" element={<Dashboard rentals={rentals} toys={toys} transactions={transactions} />} />
                 <Route path="/estoque" element={<Inventory toys={toys} setToys={setToys} categories={categories} setCategories={(c) => setDoc(doc(db, "settings", "categories"), { list: c })} />} />
+                <Route path="/catalogo" element={<Inventory toys={toys} setToys={setToys} categories={categories} setCategories={(c) => setDoc(doc(db, "settings", "categories"), { list: c })} />} />
                 <Route path="/clientes" element={<CustomersPage customers={customers} setCustomers={()=>{}} />} />
                 <Route path="/disponibilidade" element={<Availability rentals={rentals} toys={toys} />} />
                 <Route path="/orcamentos" element={<BudgetsPage rentals={rentals} setRentals={()=>{}} customers={customers} toys={toys} company={company} />} />
@@ -199,7 +176,7 @@ const App: React.FC = () => {
                 <Route path="/contratos" element={<DocumentsPage type="contract" rentals={rentals} customers={customers} company={company} />} />
                 <Route path="/recibos" element={<DocumentsPage type="receipt" rentals={rentals} customers={customers} company={company} />} />
                 <Route path="/colaboradores" element={user.role === UserRole.ADMIN ? <Staff staff={[]} setStaff={()=>{}} /> : <Navigate to="/reservas" />} />
-                <Route path="/configuracoes" element={user.role === UserRole.ADMIN ? <AppSettings company={company} setCompany={(c) => setDoc(doc(db, "settings", "company"), c)} user={user} onUpdateUser={handleUpdateUser} /> : <Navigate to="/reservas" />} />
+                <Route path="/configuracoes" element={user.role === UserRole.ADMIN ? <AppSettings company={company} setCompany={(c) => setDoc(doc(db, "settings", "company"), c)} user={user} onUpdateUser={(u) => { setUser(u); localStorage.setItem('susu_user', JSON.stringify(u)); }} /> : <Navigate to="/reservas" />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Layout>
