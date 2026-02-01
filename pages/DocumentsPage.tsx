@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { FileSignature, Receipt, Download, X, Eye, Upload, Image as ImageIcon } from 'lucide-react';
 import { Rental, Customer, CompanySettings, User } from '../types';
@@ -15,6 +14,7 @@ const DocumentsPage: React.FC<Props> = ({ type, rentals, customers, company }) =
   const [contractTerms, setContractTerms] = useState(company.contractTerms || '1. OBJETO: A CONTRATADA compromete-se a disponibilizar os brinquedos e equipamentos em perfeito estado de higienização e segurança.\n2. RESPONSABILIDADE: O CONTRATANTE assume inteira responsabilidade por mau uso.\n3. CANCELAMENTO: Desistências com menos de 48h não têm estorno do sinal.');
   const [contractImage, setContractImage] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const userStr = localStorage.getItem('susu_user');
@@ -24,70 +24,74 @@ const DocumentsPage: React.FC<Props> = ({ type, rentals, customers, company }) =
   const Icon = type === 'contract' ? FileSignature : Receipt;
 
   const handleDownloadPDF = async (elementId: string, filename: string) => {
-  const element = document.getElementById(elementId);
-  if (!element) return;
-  
-  // Prepara o elemento para renderização
-  const originalDisplay = element.style.display;
-  const originalPosition = element.style.position;
-  const originalLeft = element.style.left;
-  const originalWidth = element.style.width;
-  
-  element.style.display = 'block';
-  element.style.position = 'absolute';
-  element.style.left = '-9999px';
-  element.style.width = '210mm';
-  
-  const { jsPDF } = (window as any).jspdf;
-  try {
-    const canvas = await (window as any).html2canvas(element, { 
-      scale: 3,
-      useCORS: true,
-      logging: false,
-      windowWidth: 794,
-      windowHeight: element.scrollHeight
-    });
+    setIsGeneratingPDF(true);
     
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const pdfWidth = 210;
-    const pdfHeight = 297;
-    const imgWidth = pdfWidth;
-    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-    
-    let heightLeft = imgHeight;
-    let position = 0;
-    
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-    heightLeft -= pdfHeight;
-    
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pdfHeight;
+    try {
+      const element = document.getElementById(elementId);
+      if (!element) {
+        alert('Erro: Elemento não encontrado');
+        return;
+      }
+
+      // Configurações otimizadas para captura
+      const canvas = await (window as any).html2canvas(element, {
+        scale: 3, // Maior qualidade
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: 1200, // Largura fixa para consistência
+        windowHeight: element.scrollHeight
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const { jsPDF } = (window as any).jspdf;
+      
+      // Criar PDF em formato A4
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
+
+      // Dimensões do A4 em mm
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const margin = 10;
+      
+      // Calcular dimensões da imagem mantendo proporção
+      const imgWidth = pageWidth - (margin * 2);
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      // Se a imagem couber em uma página
+      if (imgHeight <= pageHeight - (margin * 2)) {
+        pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight);
+      } else {
+        // Dividir em múltiplas páginas
+        let heightLeft = imgHeight;
+        let position = margin;
+        
+        // Primeira página
+        pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+        heightLeft -= (pageHeight - margin);
+        
+        // Páginas seguintes
+        while (heightLeft > 0) {
+          position = heightLeft - imgHeight + margin;
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
+        }
+      }
+
+      pdf.save(`${filename}.pdf`);
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      alert('Erro ao gerar o PDF. Tente novamente.');
+    } finally {
+      setIsGeneratingPDF(false);
     }
-    
-    pdf.save(`${filename}.pdf`);
-  } catch (err) {
-    console.error("PDF Error:", err);
-    alert("Erro ao gerar o documento.");
-  } finally {
-    element.style.display = originalDisplay;
-    element.style.position = originalPosition;
-    element.style.left = originalLeft;
-    element.style.width = originalWidth;
-  }
-};
-    const { jsPDF } = (window as any).jspdf;
-    const canvas = await (window as any).html2canvas(element, { scale: 2, useCORS: true });
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const imgProps = pdf.getImageProperties(imgData);
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-    pdf.save(`${filename}.pdf`);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,7 +142,7 @@ const DocumentsPage: React.FC<Props> = ({ type, rentals, customers, company }) =
                               <p className="text-xs font-black uppercase">Adicionar anexo visual</p>
                           </div>
                       )}
-                      <button onClick={()=>fileInputRef.current?.click()} className="absolute inset-0 bg-blue-600/0 hover:bg-blue-600/20 transition-all cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center">
+                      <button type="button" onClick={()=>fileInputRef.current?.click()} className="absolute inset-0 bg-blue-600/0 hover:bg-blue-600/20 transition-all cursor-pointer opacity-0 group-hover:opacity-100 flex items-center justify-center">
                           <Upload className="text-white" size={32}/>
                       </button>
                   </div>
@@ -169,67 +173,73 @@ const DocumentsPage: React.FC<Props> = ({ type, rentals, customers, company }) =
 
       {selectedRental && (
         <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 print:p-0">
-          <div className="bg-white w-full max-w-3xl h-[95vh] print:h-auto rounded-[40px] print:rounded-none overflow-hidden flex flex-col print:block shadow-2xl">
+          <div className="bg-white w-full max-w-3xl max-h-[95vh] print:max-h-none rounded-[40px] print:rounded-none overflow-hidden flex flex-col print:block shadow-2xl">
             <div className="p-6 border-b flex justify-between items-center bg-slate-50 print:hidden">
               <h2 className="font-bold text-slate-800 uppercase tracking-widest text-[10px]">Documento Gerado</h2>
               <button onClick={()=>setSelectedRental(null)} className="p-2 hover:bg-white rounded-full"><X size={20}/></button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-12 bg-white text-slate-800 space-y-8 font-serif leading-relaxed" id="document-print-area">
-              <div className="flex flex-col items-center text-center space-y-4 pb-8 border-b">
-                <div className="w-20 h-20 rounded-[28px] overflow-hidden border-2 border-slate-900 mb-2">
-                    {user?.profilePhotoUrl ? <img src={user.profilePhotoUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-100"/>}
+            <div className="flex-1 overflow-y-auto print:overflow-visible">
+              <div className="p-8 md:p-12 bg-white text-slate-800 space-y-8 font-serif leading-relaxed" id="document-print-area" style={{ width: '100%', maxWidth: '800px', margin: '0 auto' }}>
+                <div className="flex flex-col items-center text-center space-y-4 pb-8 border-b">
+                  <div className="w-20 h-20 rounded-[28px] overflow-hidden border-2 border-slate-900 mb-2">
+                      {user?.profilePhotoUrl ? <img src={user.profilePhotoUrl} className="w-full h-full object-cover" alt="Logo" /> : <div className="w-full h-full bg-slate-100"/>}
+                  </div>
+                  <h1 className="text-2xl font-black uppercase tracking-tight">{Title}</h1>
+                  <div className="text-[10px] uppercase font-bold text-slate-500">
+                      <p>{company.name} | CNPJ: {company.cnpj}</p>
+                      <p>{company.address}</p>
+                      <p>Contatos: {company.phone} | {company.email}</p>
+                  </div>
                 </div>
-                <h1 className="text-2xl font-black uppercase tracking-tight">{Title}</h1>
-                <div className="text-[10px] uppercase font-bold text-slate-500">
-                    <p>{company.name} | CNPJ: {company.cnpj}</p>
-                    <p>{company.address}</p>
-                    <p>Contatos: {company.phone} | {company.email}</p>
-                </div>
-              </div>
-              
-              <div className="space-y-4 text-sm">
-                <div className="bg-slate-50 p-6 rounded-3xl space-y-2 border border-slate-100">
-                    <p><strong>CLIENTE / LOCATÁRIO:</strong> {selectedRental.customerName}</p>
-                    <p><strong>DOC:</strong> {customers.find(c=>c.id===selectedRental.customerId)?.cnpj || customers.find(c=>c.id===selectedRental.customerId)?.cpf || 'Não informado'}</p>
-                    <p><strong>ENDEREÇO DO EVENTO:</strong> {selectedRental.eventAddress || customers.find(c=>c.id===selectedRental.customerId)?.address}</p>
+                
+                <div className="space-y-4 text-sm">
+                  <div className="bg-slate-50 p-6 rounded-3xl space-y-2 border border-slate-100">
+                      <p><strong>CLIENTE / LOCATÁRIO:</strong> {selectedRental.customerName}</p>
+                      <p><strong>DOC:</strong> {customers.find(c=>c.id===selectedRental.customerId)?.cnpj || customers.find(c=>c.id===selectedRental.customerId)?.cpf || 'Não informado'}</p>
+                      <p><strong>ENDEREÇO DO EVENTO:</strong> {selectedRental.eventAddress || customers.find(c=>c.id===selectedRental.customerId)?.address}</p>
+                  </div>
+
+                  <div className="bg-slate-900 text-white p-8 rounded-[32px] grid grid-cols-2 gap-4">
+                      <div>
+                          <p className="text-[9px] font-black uppercase text-slate-500 mb-1">Valor Total</p>
+                          <p className="text-2xl font-black">R$ {selectedRental.totalValue.toLocaleString('pt-BR')}</p>
+                      </div>
+                      <div className="text-right">
+                          <p className="text-[9px] font-black uppercase text-emerald-500 mb-1">Status de Pagamento</p>
+                          <p className="text-2xl font-black text-emerald-400">R$ {selectedRental.entryValue.toLocaleString('pt-BR')} (Pago)</p>
+                      </div>
+                  </div>
+
+                  <div className="pt-6 space-y-4">
+                      <p className="font-bold uppercase text-[10px] text-slate-400 mb-2 tracking-widest">Condições de Locação</p>
+                      <div className="text-xs text-justify whitespace-pre-line leading-relaxed italic opacity-80">
+                          {type === 'contract' ? contractTerms : `Declaramos para os devidos fins que recebemos de ${selectedRental.customerName} a quantia de R$ ${selectedRental.totalValue.toLocaleString('pt-BR')} quitando integralmente o serviço de locação prestado.`}
+                      </div>
+                  </div>
+
+                  {contractImage && type === 'contract' && (
+                      <div className="pt-10">
+                          <p className="font-bold uppercase text-[10px] text-slate-400 mb-4 tracking-widest">Anexo do Contrato</p>
+                          <img src={contractImage} className="w-full h-72 object-cover rounded-3xl border" alt="Anexo" />
+                      </div>
+                  )}
                 </div>
 
-                <div className="bg-slate-900 text-white p-8 rounded-[32px] grid grid-cols-2 gap-4">
-                    <div>
-                        <p className="text-[9px] font-black uppercase text-slate-500 mb-1">Valor Total</p>
-                        <p className="text-2xl font-black">R$ {selectedRental.totalValue.toLocaleString('pt-BR')}</p>
-                    </div>
-                    <div className="text-right">
-                        <p className="text-[9px] font-black uppercase text-emerald-500 mb-1">Status de Pagamento</p>
-                        <p className="text-2xl font-black text-emerald-400">R$ {selectedRental.entryValue.toLocaleString('pt-BR')} (Pago)</p>
-                    </div>
+                <div className="pt-32 grid grid-cols-2 gap-16 text-center text-[10px] font-black uppercase tracking-widest">
+                  <div className="border-t-2 border-slate-900 pt-3">{company.name}</div>
+                  <div className="border-t-2 border-slate-900 pt-3">{selectedRental.customerName}</div>
                 </div>
-
-                <div className="pt-6 space-y-4">
-                    <p className="font-bold uppercase text-[10px] text-slate-400 mb-2 tracking-widest">Condições de Locação</p>
-                    <div className="text-xs text-justify whitespace-pre-line leading-relaxed italic opacity-80">
-                        {type === 'contract' ? contractTerms : `Declaramos para os devidos fins que recebemos de ${selectedRental.customerName} a quantia de R$ ${selectedRental.totalValue.toLocaleString('pt-BR')} quitando integralmente o serviço de locação prestado.`}
-                    </div>
-                </div>
-
-                {contractImage && type === 'contract' && (
-                    <div className="pt-10">
-                        <p className="font-bold uppercase text-[10px] text-slate-400 mb-4 tracking-widest">Anexo do Contrato</p>
-                        <img src={contractImage} className="w-full h-72 object-cover rounded-3xl border" />
-                    </div>
-                )}
-              </div>
-
-              <div className="pt-32 grid grid-cols-2 gap-16 text-center text-[10px] font-black uppercase tracking-widest">
-                <div className="border-t-2 border-slate-900 pt-3">{company.name}</div>
-                <div className="border-t-2 border-slate-900 pt-3">{selectedRental.customerName}</div>
               </div>
             </div>
             
             <div className="p-8 bg-slate-50 border-t flex justify-end gap-3 print:hidden">
-              <button onClick={() => handleDownloadPDF('document-print-area', `${type}-${selectedRental.customerName}`)} className="flex items-center gap-3 bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl active:scale-95">
-                <Download size={18}/> Baixar Arquivo (PDF)
+              <button 
+                onClick={() => handleDownloadPDF('document-print-area', `${type}-${selectedRental.customerName}`)} 
+                disabled={isGeneratingPDF}
+                className="flex items-center gap-3 bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download size={18}/> {isGeneratingPDF ? 'Gerando PDF...' : 'Baixar Arquivo (PDF)'}
               </button>
             </div>
           </div>
