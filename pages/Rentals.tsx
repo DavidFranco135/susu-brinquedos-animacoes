@@ -127,9 +127,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
     }
   };
 
-  const handleDownloadPDF = async (rental: Rental) => {
-  const element = document.getElementById('print-area-rental');
-  if (!element) return;
+  
   
   element.classList.remove('hidden');
   element.style.display = 'block';
