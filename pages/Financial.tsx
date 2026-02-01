@@ -1,8 +1,8 @@
-
 import React, { useState, useMemo } from 'react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, 
-  BarChart, Bar, AreaChart, Area, PieChart, Pie, Legend
+  BarChart, Bar, AreaChart, Area, PieChart, Pie, Legend,
+  ComposedChart, Line // Adicionados para o gráfico de performance
 } from 'recharts';
 import { Wallet, TrendingUp, TrendingDown, Plus, X, Filter, Download, DollarSign, ChevronRight, PieChart as PieIcon, Activity, BarChart3, Clock, CheckCircle2, AlertCircle, ArrowUpRight } from 'lucide-react';
 import { FinancialTransaction, Rental, RentalStatus, User, PaymentMethod } from '../types';
@@ -27,6 +27,8 @@ const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTran
 
   const userStr = localStorage.getItem('susu_user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
+
+  const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
   const filteredData = useMemo(() => {
     const yearMatch = (date: string) => date.startsWith(filterYear);
@@ -59,6 +61,30 @@ const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTran
   const netProfit = totalRealizedIncome - totalExpenses;
   const profitMargin = totalRealizedIncome > 0 ? (netProfit / totalRealizedIncome) * 100 : 0;
   const totalPending = useMemo(() => filteredData.rentals.filter(r => r.status !== RentalStatus.CANCELLED && r.status !== RentalStatus.COMPLETED).reduce((acc, r) => acc + (r.totalValue - (r.entryValue || 0)), 0), [filteredData]);
+
+  // NOVOS CÁLCULOS PARA GRÁFICOS ANALÍTICOS
+  const expenseByCategory = useMemo(() => {
+    const categories: Record<string, number> = {};
+    filteredData.transactions.filter(t => t.type === 'EXPENSE').forEach(t => {
+        const cat = t.category || 'Outros';
+        categories[cat] = (categories[cat] || 0) + Number(t.value);
+    });
+    return Object.entries(categories).map(([name, value]) => ({ name, value }));
+  }, [filteredData]);
+
+  const monthlyComparisonData = useMemo(() => {
+    return ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].map((m, i) => {
+      const mStr = String(i+1).padStart(2,'0');
+      const mRentals = rentals.filter(r => r.date.includes(`${filterYear}-${mStr}`));
+      const mTrans = transactions.filter(t => t.date.includes(`${filterYear}-${mStr}`));
+      
+      const inc = mRentals.reduce((acc, r) => acc + (r.status === RentalStatus.COMPLETED ? r.totalValue : r.entryValue), 0) + 
+                  mTrans.filter(t => t.type !== 'EXPENSE').reduce((acc, t) => acc + Number(t.value), 0);
+      const exp = mTrans.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + Number(t.value), 0);
+      
+      return { name: m, receita: inc, despesa: exp, lucro: inc - exp };
+    });
+  }, [rentals, transactions, filterYear]);
 
   const handleSettleDebt = (rentalId: string) => {
     if (!confirm("Confirmar que o cliente pagou o saldo restante? Esta reserva será marcada como CONCLUÍDA.")) return;
@@ -184,7 +210,6 @@ const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTran
           </div>
       </div>
 
-      {/* ... restante do componente original (filtros, kpis, graficos, modais) ... */}
       <div className="bg-white p-6 rounded-[32px] border flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm print:hidden">
         <div className="flex items-center gap-3 w-full md:w-auto">
           <Filter size={18} className="text-slate-400" />
@@ -214,6 +239,45 @@ const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTran
         <StatCard title="A Receber" value={totalPending} sub="Dívidas pendentes" icon={<Clock size={24}/>} color="amber" type="PENDING" />
         <StatCard title="Rentabilidade" value={profitMargin} sub="Margem de lucro" icon={<Activity size={24}/>} color="purple" type="PROFIT" isMoney={false} />
         <StatCard title="Lucro Líquido" value={netProfit} sub="O que sobrou" icon={<DollarSign size={24}/>} color="blue" type="PROFIT" />
+      </div>
+
+      {/* NOVOS GRÁFICOS ANALÍTICOS INSERIDOS AQUI */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+        <div className="bg-white p-8 rounded-[50px] border border-slate-100 shadow-sm lg:col-span-1">
+          <h3 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-3">
+            <div className="w-1.5 h-6 bg-red-500 rounded-full"></div> Gastos por Categoria
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={expenseByCategory} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                  {expenseByCategory.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
+                </Pie>
+                <Tooltip />
+                <Legend verticalAlign="bottom" height={36}/>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white p-8 rounded-[50px] border border-slate-100 shadow-sm lg:col-span-2">
+          <h3 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-3">
+            <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div> Performance Mensal (Receita vs Lucro)
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={monthlyComparisonData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="receita" fill="#10B981" radius={[4, 4, 0, 0]} barSize={20} />
+                <Line type="monotone" dataKey="lucro" stroke="#3B82F6" strokeWidth={3} dot={{ r: 4 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
@@ -254,23 +318,13 @@ const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTran
             </h3>
             <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].map((m, i) => {
-                        const mStr = String(i+1).padStart(2,'0');
-                        const monthRentals = rentals.filter(r => r.date.includes(`${filterYear}-${mStr}`));
-                        const monthTrans = transactions.filter(t => t.date.includes(`${filterYear}-${mStr}`));
-                        
-                        const inc = monthRentals.reduce((acc, r) => acc + (r.status === RentalStatus.COMPLETED ? r.totalValue : r.entryValue), 0) + 
-                                    monthTrans.filter(t => t.type !== 'EXPENSE').reduce((acc, t) => acc + t.value, 0);
-                        const exp = monthTrans.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + t.value, 0);
-                        
-                        return { name: m, lucro: inc - exp };
-                    })}>
+                    <BarChart data={monthlyComparisonData}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
                         <YAxis axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
                         <Tooltip />
                         <Bar dataKey="lucro" radius={[8, 8, 0, 0]}>
-                            {['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].map((entry, index) => (
+                            {monthlyComparisonData.map((_, index) => (
                                 <Cell key={`cell-${index}`} fill={index === now.getMonth() ? '#3B82F6' : '#E2E8F0'} />
                             ))}
                         </Bar>
