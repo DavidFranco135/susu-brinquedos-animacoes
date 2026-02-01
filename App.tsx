@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { initializeApp } from "firebase/app";
@@ -256,24 +257,10 @@ const App: React.FC = () => {
                     const next = typeof action === 'function' ? action(rentals) : action;
                     next.forEach((r: Rental) => setDoc(doc(db, "rentals", r.id), r));
                 }} customers={customers} toys={toys} company={company} />} />
-                
-                {/* LINHA CORRIGIDA: Adicionei toys={toys} */}
-                <Route path="/financeiro" element={user.role === UserRole.ADMIN ? (
-                  <Financial 
-                    rentals={rentals} 
-                    setRentals={(action: any) => {
-                        const next = typeof action === 'function' ? action(rentals) : action;
-                        next.forEach((r: Rental) => setDoc(doc(db, "rentals", r.id), r));
-                    }} 
-                    transactions={transactions} 
-                    setTransactions={(action: any) => {
-                        const next = typeof action === 'function' ? action(transactions) : action;
-                        next.forEach((t: FinancialTransaction) => setDoc(doc(db, "transactions", t.id), t));
-                    }}
-                    toys={toys}  {/* <- ADICIONEI ESTA PROP */}
-                  />
-                ) : <Navigate to="/reservas" />} />
-                
+                <Route path="/financeiro" element={user.role === UserRole.ADMIN ? <Financial rentals={rentals} setRentals={()=>{}} transactions={transactions} setTransactions={(action: any) => {
+                    const next = typeof action === 'function' ? action(transactions) : action;
+                    next.forEach((t: FinancialTransaction) => setDoc(doc(db, "transactions", t.id), t));
+                }} /> : <Navigate to="/reservas" />} />
                 <Route path="/contratos" element={<DocumentsPage type="contract" rentals={rentals} customers={customers} company={company} />} />
                 <Route path="/recibos" element={<DocumentsPage type="receipt" rentals={rentals} customers={customers} company={company} />} />
                 <Route path="/colaboradores" element={user.role === UserRole.ADMIN ? <Staff staff={[]} setStaff={()=>{}} /> : <Navigate to="/reservas" />} />
