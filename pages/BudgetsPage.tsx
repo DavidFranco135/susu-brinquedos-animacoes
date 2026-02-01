@@ -38,42 +38,60 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
     }
   }, [formData.toyIds, toys]);
 
-  const handleDownloadPDF = async (elementId: string, filename: string) => {
-  const element = document.getElementById(elementId);
+  const handleDownloadPDF = async (rental: Rental) => {
+  const element = document.getElementById('print-area');
   if (!element) return;
-
+  
+  // Torna o elemento visível temporariamente
+  element.classList.remove('hidden');
+  element.style.display = 'block';
+  element.style.position = 'absolute';
+  element.style.left = '-9999px';
+  element.style.width = '210mm'; // Largura A4
+  
   const { jsPDF } = (window as any).jspdf;
-
-  const canvas = await (window as any).html2canvas(element, {
-    scale: 2,
-    useCORS: true,
-    scrollY: -window.scrollY
-  });
-
-  const imgData = canvas.toDataURL('image/png');
-
-  const pdf = new jsPDF('p', 'mm', 'a4');
-
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-
-  const imgWidth = pageWidth;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-  let heightLeft = imgHeight;
-  let position = 0;
-
-  pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-  heightLeft -= pageHeight;
-
-  while (heightLeft > 0) {
-    position -= pageHeight;
-    pdf.addPage();
+  try {
+    const canvas = await (window as any).html2canvas(element, { 
+      scale: 3,
+      useCORS: true,
+      logging: false,
+      windowWidth: 794, // ~210mm em pixels
+      windowHeight: element.scrollHeight
+    });
+    
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = 210;
+    const pdfHeight = 297;
+    const imgWidth = pdfWidth;
+    const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+    
+    let heightLeft = imgHeight;
+    let position = 0;
+    
+    // Adiciona primeira página
     pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
+    heightLeft -= pdfHeight;
+    
+    // Adiciona páginas extras se necessário
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+    }
+    
+    pdf.save(`orcamento-${rental.customerName}.pdf`);
+  } catch (err) {
+    console.error("PDF Error:", err);
+    alert("Erro ao gerar o orçamento.");
+  } finally {
+    element.style.display = '';
+    element.style.position = '';
+    element.style.left = '';
+    element.style.width = '';
+    element.classList.add('hidden');
   }
-
-  pdf.save(`${filename}.pdf`);
 };
 
 
