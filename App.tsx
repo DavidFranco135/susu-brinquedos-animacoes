@@ -50,8 +50,8 @@ const db = getFirestore(app);
 
 // COMPONENTE DE LOGIN COM FUNDO PERSONALIZADO + BOTÃO CATÁLOGO
 const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
-  const [email, setEmail] = useState('admsusu@gmail.com');
-  const [password, setPassword] = useState('123456');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -82,8 +82,8 @@ const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
           <div className="w-24 h-24 bg-blue-600 rounded-[30px] flex items-center justify-center mb-6 shadow-xl overflow-hidden">
              {company?.logoUrl ? <img src={company.logoUrl} className="w-full h-full object-cover" alt="Logo" /> : <UserIcon size={40} className="text-white" />}
           </div>
-          <h2 className="text-xl font-black text-slate-800 tracking-widest uppercase">MAIS QUE BRINQUEDOS</h2>
-          <p className="text-slate-500 mt-1 font-medium text-sm">{company?.name || 'SUSU Eventos'}</p>
+          <h2 className="text-xl font-black text-slate-800 tracking-widest uppercase">MAIS QUE BRINQUEDOS,</h2>
+          <p className="text-slate-500 mt-1 font-medium text-sm">{company?.name || 'MOMENTOS FELIZES!'}</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6 w-full">
           {error && <div className="p-4 bg-red-50 text-red-500 text-xs font-bold rounded-2xl text-center">{error}</div>}
