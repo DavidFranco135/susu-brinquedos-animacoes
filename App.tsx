@@ -1,22 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { initializeApp } from "firebase/app";
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
-  onAuthStateChanged, 
-  signOut 
-} from "firebase/auth";
-import { 
-  getFirestore, 
-  collection, 
-  onSnapshot, 
-  doc, 
-  setDoc, 
-  query,
-  orderBy,
-  deleteDoc
-} from "firebase/firestore";
+
+
 
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
@@ -34,20 +19,9 @@ import PublicCatalog from './PublicCatalog'; // ← NOVO IMPORT
 import { Customer, Toy, Rental, User, UserRole, FinancialTransaction, CompanySettings as CompanyType } from './types';
 import { User as UserIcon, Loader2, ExternalLink } from 'lucide-react';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBUvwY-e7h0KZyFJv7n0ignpzlMUGJIurU",
-  authDomain: "niklaus-b2b.firebaseapp.com",
-  projectId: "niklaus-b2b",
-  storageBucket: "niklaus-b2b.firebasestorage.app",
-  messagingSenderId: "936430517671",
-  appId: "1:936430517671:web:6a0f1b86a39621d74c4a82",
-  measurementId: "G-3VGKJGWFSY"
-};
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
+// ✅ ADICIONAR ESTA LINHA:
+import { auth, db } from './firebase';
 // COMPONENTE DE LOGIN COM FUNDO PERSONALIZADO + BOTÃO CATÁLOGO
 const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
   const [email, setEmail] = useState('admsusu@gmail.com');
