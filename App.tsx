@@ -1,5 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { initializeApp } from "firebase/app";
+import { 
+  getAuth, 
+  signInWithEmailAndPassword, 
+  onAuthStateChanged, 
+  signOut 
+} from "firebase/auth";
+import { 
+  getFirestore, 
+  collection, 
+  onSnapshot, 
+  doc, 
+  setDoc, 
+  query,
+  orderBy,
+  deleteDoc
+} from "firebase/firestore";
 
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
@@ -13,28 +30,24 @@ import CustomersPage from './pages/CustomersPage';
 import BudgetsPage from './pages/BudgetsPage';
 import DocumentsPage from './pages/DocumentsPage';
 import PublicRentalSummary from './pages/PublicRentalSummary';
-import PublicCatalog from './PublicCatalog';
 import { Customer, Toy, Rental, User, UserRole, FinancialTransaction, CompanySettings as CompanyType } from './types';
-import { User as UserIcon, Loader2, ExternalLink } from 'lucide-react';
+import { User as UserIcon, Loader2 } from 'lucide-react';
 
-import { auth, db } from './firebase';
-import { 
-  signInWithEmailAndPassword, 
-  onAuthStateChanged, 
-  signOut 
-} from "firebase/auth";
+const firebaseConfig = {
+  apiKey: "AIzaSyBUvwY-e7h0KZyFJv7n0ignpzlMUGJIurU",
+  authDomain: "niklaus-b2b.firebaseapp.com",
+  projectId: "niklaus-b2b",
+  storageBucket: "niklaus-b2b.firebasestorage.app",
+  messagingSenderId: "936430517671",
+  appId: "1:936430517671:web:6a0f1b86a39621d74c4a82",
+  measurementId: "G-3VGKJGWFSY"
+};
 
-import { 
-  collection, 
-  onSnapshot, 
-  doc, 
-  setDoc, 
-  query,
-  orderBy,
-  deleteDoc
-} from "firebase/firestore";
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-// COMPONENTE DE LOGIN COM FUNDO PERSONALIZADO + BOTÃO CATÁLOGO
+// COMPONENTE DE LOGIN COM FUNDO PERSONALIZADO
 const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
   const [email, setEmail] = useState('admsusu@gmail.com');
   const [password, setPassword] = useState('123456');
@@ -79,15 +92,6 @@ const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
             {loading ? <Loader2 className="animate-spin" size={20}/> : 'Entrar'}
           </button>
         </form>
-        
-        <div className="w-full mt-6 pt-6 border-t border-slate-200">
-          <a 
-            href="#/catalogo" 
-            className="w-full flex items-center justify-center gap-3 bg-slate-50 text-slate-600 font-black py-4 rounded-2xl hover:bg-slate-100 transition-all text-xs uppercase tracking-widest"
-          >
-            <ExternalLink size={16} /> Ver Catálogo Público
-          </a>
-        </div>
       </div>
     </div>
   );
@@ -107,10 +111,12 @@ const App: React.FC = () => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
+        // Monitoramento em tempo real do documento do utilizador
         const unsubUser = onSnapshot(doc(db, "users", firebaseUser.uid), (docSnap) => {
           if (docSnap.exists()) {
             setUser(docSnap.data() as User);
           } else {
+            // Criação inicial se o documento não existir
             const newUser: User = {
               id: firebaseUser.uid,
               name: firebaseUser.email?.split('@')[0] || 'Usuário',
@@ -133,11 +139,12 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // Carrega dados da empresa mesmo deslogado para o Login
     const unsubCompany = onSnapshot(doc(db, "settings", "company"), (docSnap) => {
       if (docSnap.exists()) setCompany(docSnap.data() as CompanyType);
     });
 
-    if (!user) return () => unsubCompany();
+    if (!user) return;
 
     const unsubToys = onSnapshot(query(collection(db, "toys"), orderBy("name")), (snap) => setToys(snap.docs.map(d => ({ ...d.data(), id: d.id } as Toy))));
     const unsubCustomers = onSnapshot(query(collection(db, "customers"), orderBy("name")), (snap) => setCustomers(snap.docs.map(d => ({ ...d.data(), id: d.id } as Customer))));
@@ -146,22 +153,15 @@ const App: React.FC = () => {
     const unsubStaff = onSnapshot(collection(db, "users"), (snap) => setStaff(snap.docs.map(d => ({ ...d.data(), id: d.id } as User))));
     const unsubCategories = onSnapshot(doc(db, "settings", "categories"), (docSnap) => docSnap.exists() && setCategories(docSnap.data().list || []));
 
-    return () => { 
-      unsubToys(); 
-      unsubCustomers(); 
-      unsubRentals(); 
-      unsubFinancial(); 
-      unsubCompany(); 
-      unsubStaff(); 
-      unsubCategories(); 
-    };
+    return () => { unsubToys(); unsubCustomers(); unsubRentals(); unsubFinancial(); unsubCompany(); unsubStaff(); unsubCategories(); };
   }, [user]);
 
+  // CORREÇÃO DEFINITIVA DA FOTO DE PERFIL
   const handleUpdateUser = async (updatedUser: User) => {
     if (updatedUser.id) {
       try {
         await setDoc(doc(db, "users", updatedUser.id), updatedUser, { merge: true });
-        setUser(updatedUser);
+        setUser(updatedUser); // Atualiza localmente para resposta imediata
       } catch (e) {
         console.error("Erro ao salvar perfil:", e);
       }
@@ -169,22 +169,17 @@ const App: React.FC = () => {
   };
 
   const handleUpdateCompany = async (updatedCompany: CompanyType) => {
-    try {
-      await setDoc(doc(db, "settings", "company"), updatedCompany);
-    } catch (e) {
-      console.error("Erro ao atualizar empresa:", e);
-    }
+    await setDoc(doc(db, "settings", "company"), updatedCompany);
   };
 
   if (initializing) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
 
+  // Função para verificar acesso (Admin ignora travas, Colaborador verifica array)
   const hasAccess = (pageId: string) => user?.role === UserRole.ADMIN || user?.allowedPages?.includes(pageId);
 
   return (
     <Router>
       <Routes>
-        <Route path="/catalogo" element={<PublicCatalog />} />
-        
         <Route path="/resumo/:id" element={<PublicRentalSummary rentals={rentals} toys={toys} company={company || {} as CompanyType} />} />
         <Route path="*" element={
           !user ? <Login company={company} /> : (
@@ -192,22 +187,44 @@ const App: React.FC = () => {
               <Routes>
                 <Route path="/" element={hasAccess('dashboard') ? <Dashboard rentals={rentals} toysCount={toys.length} transactions={transactions} /> : <Navigate to="/reservas" />} />
                 
-                <Route path="/reservas" element={hasAccess('rentals') ? <Rentals rentals={rentals} setRentals={setRentals} customers={customers} toys={toys} /> : <Navigate to="/" />} />
+                <Route path="/reservas" element={hasAccess('rentals') ? <Rentals rentals={rentals} setRentals={(a: any) => { 
+                  const n = typeof a === 'function' ? a(rentals) : a; 
+                  n.forEach((r: Rental) => setDoc(doc(db, "rentals", r.id), r)); 
+                }} customers={customers} toys={toys} /> : <Navigate to="/" />} />
                 
-                <Route path="/brinquedos" element={hasAccess('toys') ? <Inventory toys={toys} setToys={setToys} categories={categories} setCategories={(c) => setDoc(doc(db, "settings", "categories"), { list: c })} /> : <Navigate to="/reservas" />} />
+                <Route path="/brinquedos" element={hasAccess('toys') ? <Inventory toys={toys} setToys={(a: any) => { 
+                  const n = typeof a === 'function' ? a(toys) : a; 
+                  n.forEach((t: Toy) => setDoc(doc(db, "toys", t.id), t)); 
+                }} categories={categories} setCategories={(c) => setDoc(doc(db, "settings", "categories"), { list: c })} /> : <Navigate to="/reservas" />} />
                 
-                <Route path="/clientes" element={hasAccess('customers') ? <CustomersPage customers={customers} setCustomers={setCustomers} /> : <Navigate to="/reservas" />} />
+                <Route path="/clientes" element={hasAccess('customers') ? <CustomersPage customers={customers} setCustomers={(a: any) => { 
+                  const n = typeof a === 'function' ? a(customers) : a; 
+                  n.forEach((c: Customer) => setDoc(doc(db, "customers", c.id), c)); 
+                }} /> : <Navigate to="/reservas" />} />
                 
-                <Route path="/orcamentos" element={hasAccess('budgets') ? <BudgetsPage rentals={rentals} setRentals={setRentals} customers={customers} toys={toys} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
+                <Route path="/orcamentos" element={hasAccess('budgets') ? <BudgetsPage rentals={rentals} setRentals={(a: any) => { 
+                  const n = typeof a === 'function' ? a(rentals) : a; 
+                  n.forEach((r: Rental) => setDoc(doc(db, "rentals", r.id), r)); 
+                }} customers={customers} toys={toys} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
 
                 <Route path="/disponibilidade" element={hasAccess('availability') || hasAccess('rentals') ? <Availability rentals={rentals} toys={toys} /> : <Navigate to="/reservas" />} />
                 
-                <Route path="/financeiro" element={hasAccess('financial') ? <Financial rentals={rentals} transactions={transactions} setTransactions={setTransactions} /> : <Navigate to="/reservas" />} />
+                <Route path="/financeiro" element={hasAccess('financial') ? <Financial rentals={rentals} transactions={transactions} setTransactions={(a: any) => { 
+                  const n = typeof a === 'function' ? a(transactions) : a; 
+                  n.forEach((t: FinancialTransaction) => setDoc(doc(db, "transactions", t.id), t)); 
+                }} /> : <Navigate to="/reservas" />} />
                 
                 <Route path="/contratos" element={hasAccess('documents') ? <DocumentsPage type="contract" rentals={rentals} customers={customers} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
                 <Route path="/recibos" element={hasAccess('documents') ? <DocumentsPage type="receipt" rentals={rentals} customers={customers} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
                 
-                <Route path="/colaboradores" element={user.role === UserRole.ADMIN ? <Staff staff={staff.filter(u => u.email !== 'admsusu@gmail.com')} setStaff={setStaff} /> : <Navigate to="/reservas" />} />
+                <Route path="/colaboradores" element={user.role === UserRole.ADMIN ? <Staff staff={staff.filter(u => u.email !== 'admsusu@gmail.com')} setStaff={(a: any) => { 
+                  const n = typeof a === 'function' ? a(staff) : a; 
+                  if (n.length < staff.length) { 
+                    const r = staff.find(u => !n.find(nx => nx.id === u.id)); 
+                    if (r) deleteDoc(doc(db, "users", r.id)); 
+                  } 
+                  n.forEach((u: User) => setDoc(doc(db, "users", u.id), u)); 
+                }} /> : <Navigate to="/reservas" />} />
 
                 <Route path="/configuracoes" element={user.role === UserRole.ADMIN ? <AppSettings company={company || {} as CompanyType} setCompany={handleUpdateCompany} user={user} onUpdateUser={handleUpdateUser} /> : <Navigate to="/reservas" />} />
                 
