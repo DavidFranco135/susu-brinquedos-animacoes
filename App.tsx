@@ -30,8 +30,9 @@ import CustomersPage from './pages/CustomersPage';
 import BudgetsPage from './pages/BudgetsPage';
 import DocumentsPage from './pages/DocumentsPage';
 import PublicRentalSummary from './pages/PublicRentalSummary';
+import PublicCatalog from './PublicCatalog'; // ← NOVO IMPORT
 import { Customer, Toy, Rental, User, UserRole, FinancialTransaction, CompanySettings as CompanyType } from './types';
-import { User as UserIcon, Loader2 } from 'lucide-react';
+import { User as UserIcon, Loader2, ExternalLink } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBUvwY-e7h0KZyFJv7n0ignpzlMUGJIurU",
@@ -47,7 +48,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// COMPONENTE DE LOGIN COM FUNDO PERSONALIZADO
+// COMPONENTE DE LOGIN COM FUNDO PERSONALIZADO + BOTÃO CATÁLOGO
 const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
   const [email, setEmail] = useState('admsusu@gmail.com');
   const [password, setPassword] = useState('123456');
@@ -92,6 +93,16 @@ const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
             {loading ? <Loader2 className="animate-spin" size={20}/> : 'Entrar'}
           </button>
         </form>
+        
+        {/* ← NOVO BOTÃO PARA ACESSAR O CATÁLOGO PÚBLICO */}
+        <div className="w-full mt-6 pt-6 border-t border-slate-200">
+          <a 
+            href="#/catalogo" 
+            className="w-full flex items-center justify-center gap-3 bg-slate-50 text-slate-600 font-black py-4 rounded-2xl hover:bg-slate-100 transition-all text-xs uppercase tracking-widest"
+          >
+            <ExternalLink size={16} /> Ver Catálogo Público
+          </a>
+        </div>
       </div>
     </div>
   );
@@ -180,6 +191,9 @@ const App: React.FC = () => {
   return (
     <Router>
       <Routes>
+        {/* ← NOVA ROTA PÚBLICA DO CATÁLOGO */}
+        <Route path="/catalogo" element={<PublicCatalog />} />
+        
         <Route path="/resumo/:id" element={<PublicRentalSummary rentals={rentals} toys={toys} company={company || {} as CompanyType} />} />
         <Route path="*" element={
           !user ? <Login company={company} /> : (
