@@ -41,10 +41,19 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
     additionalServiceValue: 0
   });
 
+  // Estado para controlar quantidade de cada brinquedo
+  const [toyQuantities, setToyQuantities] = useState<{[key: string]: number}>({});
+
   const handleOpenModal = (rental?: Rental) => {
     if (rental) {
       setEditingRental(rental);
       setFormData(rental);
+      // Carregar quantidades dos brinquedos selecionados (todos com quantidade 1 por padrão)
+      const quantities: {[key: string]: number} = {};
+      rental.toyIds?.forEach(id => {
+        quantities[id] = 1;
+      });
+      setToyQuantities(quantities);
     } else {
       setEditingRental(null);
       setFormData({
@@ -60,6 +69,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
         additionalService: '',
         additionalServiceValue: 0
       });
+      setToyQuantities({});
     }
     setIsModalOpen(true);
   };
@@ -102,14 +112,17 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
 
   useEffect(() => {
     const selectedToys = toys.filter(t => formData.toyIds?.includes(t.id));
-    const toysTotal = selectedToys.reduce((acc, t) => acc + (t.price || 0), 0);
+    const toysTotal = selectedToys.reduce((acc, t) => {
+      const qty = toyQuantities[t.id] || 1;
+      return acc + ((t.price || 0) * qty);
+    }, 0);
     const additionalValue = Number(formData.additionalServiceValue) || 0;
     const total = toysTotal + additionalValue;
     
     if (total !== formData.totalValue) {
       setFormData(prev => ({ ...prev, totalValue: total }));
     }
-  }, [formData.toyIds, formData.additionalServiceValue, toys]);
+  }, [formData.toyIds, toyQuantities, formData.additionalServiceValue, toys]);
 
   const handleDownloadPDFUniversal = async (elementId: string, filename: string) => {
     const element = document.getElementById(elementId);
@@ -628,31 +641,94 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
                           ) : (
                               filteredToys.map(toy => {
                                   const isSelected = formData.toyIds?.includes(toy.id);
+                                  const quantity = toyQuantities[toy.id] || 1;
+                                  
                                   return (
-                                      <label key={toy.id} className={'flex items-center gap-3 p-4 rounded-2xl cursor-pointer transition-all border-2 ' + (isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-lg scale-105' : 'bg-white hover:bg-slate-100 border-transparent')}>
-                                          <input type="checkbox" className="hidden" checked={isSelected} onChange={() => {
-                                              const newToyIds = isSelected 
-                                                  ? formData.toyIds?.filter(id => id !== toy.id) 
-                                                  : [...(formData.toyIds || []), toy.id];
-                                              setFormData({...formData, toyIds: newToyIds});
-                                          }} />
-                                          
-                                          <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0">
-                                              <img src={toy.imageUrl} className="w-full h-full object-cover" alt={toy.name} />
-                                          </div>
-                                          
-                                          <div className="flex-1 min-w-0">
-                                              <p className="font-bold text-sm truncate">{toy.name}</p>
-                                              <p className={'text-xs ' + (isSelected ? 'text-blue-100' : 'text-slate-400')}>{toy.size || 'Padrão'}</p>
-                                              <p className={'text-sm font-black mt-1 ' + (isSelected ? 'text-white' : 'text-slate-700')}>R$ {toy.price.toFixed(2)}</p>
-                                          </div>
+                                      <div key={toy.id} className={'rounded-2xl transition-all border-2 overflow-hidden ' + (isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-white border-transparent')}>
+                                          <label className="flex items-center gap-3 p-4 cursor-pointer">
+                                              <input type="checkbox" className="hidden" checked={isSelected} onChange={() => {
+                                                  const newToyIds = isSelected 
+                                                      ? formData.toyIds?.filter(id => id !== toy.id) 
+                                                      : [...(formData.toyIds || []), toy.id];
+                                                  
+                                                  if (!isSelected) {
+                                                      // Ao selecionar, inicializa quantidade como 1
+                                                      setToyQuantities({...toyQuantities, [toy.id]: 1});
+                                                  } else {
+                                                      // Ao desselecionar, remove a quantidade
+                                                      const newQuantities = {...toyQuantities};
+                                                      delete newQuantities[toy.id];
+                                                      setToyQuantities(newQuantities);
+                                                  }
+                                                  
+                                                  setFormData({...formData, toyIds: newToyIds});
+                                              }} />
+                                              
+                                              <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0">
+                                                  <img src={toy.imageUrl} className="w-full h-full object-cover" alt={toy.name} />
+                                              </div>
+                                              
+                                              <div className="flex-1 min-w-0">
+                                                  <p className="font-bold text-sm truncate">{toy.name}</p>
+                                                  <p className={'text-xs ' + (isSelected ? 'text-blue-100' : 'text-slate-400')}>{toy.size || 'Padrão'}</p>
+                                                  <p className={'text-sm font-black mt-1 ' + (isSelected ? 'text-white' : 'text-slate-700')}>R$ {toy.price.toFixed(2)}</p>
+                                              </div>
 
-                                          {isSelected && (
-                                              <div className="flex-shrink-0">
-                                                  <CheckCircle2 size={24} className="text-white" />
+                                              {isSelected && (
+                                                  <div className="flex-shrink-0">
+                                                      <CheckCircle2 size={24} className="text-white" />
                                               </div>
                                           )}
                                       </label>
+                                      
+                                      {isSelected && (
+                                          <div className="px-4 pb-4 flex items-center justify-between gap-3 border-t border-blue-500/20 pt-3 mt-1">
+                                              <span className="text-xs font-bold text-white opacity-80">Quantidade:</span>
+                                              <div className="flex items-center gap-2">
+                                                  <button
+                                                      type="button"
+                                                      onClick={(e) => {
+                                                          e.preventDefault();
+                                                          if (quantity > 1) {
+                                                              setToyQuantities({...toyQuantities, [toy.id]: quantity - 1});
+                                                          }
+                                                      }}
+                                                      className="w-8 h-8 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center font-black text-white transition-all"
+                                                  >
+                                                      -
+                                                  </button>
+                                                  <input
+                                                      type="number"
+                                                      min="1"
+                                                      max={toy.quantity}
+                                                      value={quantity}
+                                                      onChange={(e) => {
+                                                          const val = parseInt(e.target.value) || 1;
+                                                          if (val >= 1 && val <= toy.quantity) {
+                                                              setToyQuantities({...toyQuantities, [toy.id]: val});
+                                                          }
+                                                      }}
+                                                      className="w-16 h-8 rounded-lg bg-white text-blue-600 text-center font-black text-sm border-0 outline-none"
+                                                  />
+                                                  <button
+                                                      type="button"
+                                                      onClick={(e) => {
+                                                          e.preventDefault();
+                                                          if (quantity < toy.quantity) {
+                                                              setToyQuantities({...toyQuantities, [toy.id]: quantity + 1});
+                                                          }
+                                                      }}
+                                                      className="w-8 h-8 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center font-black text-white transition-all"
+                                                  >
+                                                      +
+                                                  </button>
+                                              </div>
+                                              <span className="text-xs font-bold text-white opacity-80">
+                                                  = R$ {(toy.price * quantity).toFixed(2)}
+                                              </span>
+                                          </div>
+                                      )}
+                                  </div>
                                   );
                               })
                           )}
