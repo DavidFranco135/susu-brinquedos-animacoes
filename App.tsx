@@ -232,29 +232,23 @@ const App: React.FC = () => {
                   />
                 } />
                
-                <Route path="/brinquedos" element={
-                  user.role === UserRole.ADMIN ? (
-                    <Inventory 
-                      toys={toys} 
-                      setToys={(action: any) => {
-                        const next = typeof action === 'function' ? action(toys) : action;
-                        next.forEach((t: Toy) => setDoc(doc(db, "toys", t.id), t));
-                      }} 
-                      categories={categories} 
-                      setCategories={(cats) => setDoc(doc(db, "settings", "categories"), { list: cats })} 
-                    />
-                  ) : <Navigate to="/reservas" />
-                } />
-
-                <Route path="/clientes" element={
-                  <CustomersPage 
-                    customers={customers} 
-                    setCustomers={(action: any) => {
-                        const next = typeof action === 'function' ? action(customers) : action;
-                        next.forEach((c: Customer) => setDoc(doc(db, "customers", c.id), c));
-                    }} 
-                  />
-                } />
+               {/* ROTA DE BRINQUEDOS CORRIGIDA PARA COLABORADORES */}
+<Route path="/brinquedos" element={
+  user.role === UserRole.ADMIN || user.allowedPages?.includes('toys') ? (
+    <Inventory 
+      toys={toys} 
+      setToys={(action: any) => {
+        const next = typeof action === 'function' ? action(toys) : action;
+        // Salva no Firebase
+        next.forEach((t: Toy) => setDoc(doc(db, "toys", t.id), t));
+      }} 
+      categories={categories} 
+      setCategories={(cats) => setDoc(doc(db, "settings", "categories"), { list: cats })} 
+    />
+  ) : (
+    <Navigate to="/reservas" />
+  )
+} />
 
                 <Route path="/disponibilidade" element={<Availability rentals={rentals} toys={toys} />} />
                 
