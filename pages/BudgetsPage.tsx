@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { FileText, Download, Calendar, X, Plus, CheckCircle, Edit3, MessageCircle } from 'lucide-react';
 import { Rental, Toy, Customer, CompanySettings, RentalStatus, PaymentMethod, User } from '../types';
@@ -38,18 +37,53 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
     }
   }, [formData.toyIds, toys]);
 
+  // FUNÇÃO CORRIGIDA: Gera PDF com múltiplas páginas sem cortar conteúdo
   const handleDownloadPDF = async (elementId: string, filename: string) => {
     const element = document.getElementById(elementId);
     if (!element) return;
-    const { jsPDF } = (window as any).jspdf;
-    const canvas = await (window as any).html2canvas(element, { scale: 2, useCORS: true });
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const imgProps = pdf.getImageProperties(imgData);
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-    pdf.save(`${filename}.pdf`);
+
+    try {
+      const { jsPDF } = (window as any).jspdf;
+      const html2canvas = (window as any).html2canvas;
+
+      // Captura o elemento com alta qualidade
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * pageWidth) / canvas.width;
+      
+      let heightLeft = imgHeight;
+      let position = 0;
+      
+      // Adiciona primeira página
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+      
+      // Adiciona páginas adicionais se necessário
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+      
+      pdf.save(`${filename}.pdf`);
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      alert('Erro ao gerar PDF. Tente novamente.');
+    }
   };
 
   const handleSendWhatsApp = (budget: Rental) => {
@@ -136,65 +170,40 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
         </button>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 print:hidden">
-        {rentals.filter(r => r.status === RentalStatus.PENDING).map(r => (
-          <div key={r.id} className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all group">
-            <div className="flex justify-between items-start mb-8">
-              <div className="p-4 bg-blue-50 text-blue-600 rounded-3xl"><FileText size={26}/></div>
-              <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest font-mono">ID: {r.id.slice(-6)}</span>
-            </div>
-            
-            <div className="mb-8">
-              <h3 className="text-xl font-black text-slate-800 mb-1">{r.customerName}</h3>
-              <p className="text-xs text-slate-400 font-bold flex items-center gap-2 uppercase tracking-wider"><Calendar size={14}/> {new Date(r.date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
-            </div>
-
-            <div className="border-t border-slate-50 pt-8 mb-8 space-y-4">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Atrações Inclusas</p>
-              <div className="flex flex-wrap gap-2">
-                {r.toyIds.map(tid => {
-                   const toy = toys.find(t=>t.id===tid);
-                   return (
-                    <span key={tid} className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full uppercase tracking-tighter">
-                      {toy?.name} {toy?.size ? `(${toy.size})` : ''}
-                    </span>
-                   )
-                })}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {rentals.filter(r => r.status === RentalStatus.PENDING).map(budget => (
+          <div key={budget.id} className="bg-white rounded-[40px] p-8 shadow-sm border border-slate-100 hover:shadow-xl transition-all group cursor-pointer" onClick={() => setSelectedRental(budget)}>
+            <div className="flex items-start justify-between mb-6">
+              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                <FileText size={28} />
               </div>
-            </div>
-
-            <div className="flex justify-between items-center font-black text-slate-900 bg-slate-50 p-6 rounded-[32px] mb-8">
-              <span className="text-xs uppercase tracking-widest text-slate-400">Total</span>
-              <span className="text-xl">R$ {(r.totalValue || 0).toLocaleString('pt-BR')}</span>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3">
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => setSelectedRental(r)} className="flex items-center justify-center gap-2 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all active:scale-95">
-                  <Download size={16}/> Ver PDF
+              <div className="flex gap-2">
+                <button onClick={(e) => { e.stopPropagation(); handleOpenModal(budget); }} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all">
+                  <Edit3 size={18} />
                 </button>
-                <button onClick={() => handleSendWhatsApp(r)} className="flex items-center justify-center gap-2 py-4 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all active:scale-95 shadow-lg shadow-emerald-100">
-                  <MessageCircle size={16}/> Enviar Whats
+                <button onClick={(e) => { e.stopPropagation(); handleSendWhatsApp(budget); }} className="p-3 bg-emerald-50 text-emerald-400 rounded-xl hover:bg-emerald-500 hover:text-white transition-all">
+                  <MessageCircle size={18} />
                 </button>
               </div>
-              <button onClick={() => handleOpenModal(r)} className="flex items-center justify-center gap-2 py-4 bg-slate-100 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-50 transition-all active:scale-95 w-full">
-                <Edit3 size={16}/> Editar Orçamento
-              </button>
+            </div>
+            <h3 className="text-xl font-black text-slate-800 mb-2">{budget.customerName}</h3>
+            <div className="flex items-center gap-2 text-xs text-slate-400 font-bold mb-4">
+              <Calendar size={14} />
+              {new Date(budget.date + 'T00:00:00').toLocaleDateString('pt-BR')}
+            </div>
+            <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
+              <span className="text-xs font-black text-slate-400 uppercase">Valor proposto</span>
+              <span className="text-xl font-black text-slate-900">R$ {budget.totalValue.toLocaleString('pt-BR')}</span>
             </div>
           </div>
         ))}
       </div>
 
       {selectedRental && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[400] flex items-center justify-center p-4 print:p-0">
-          <div className="bg-white w-full max-w-4xl h-[95vh] print:h-auto rounded-[50px] print:rounded-none overflow-hidden flex flex-col print:block shadow-2xl">
-            <div className="p-8 border-b flex justify-between items-center bg-slate-50/50 print:hidden">
-              <h2 className="font-black text-slate-800 uppercase tracking-widest text-[10px]">Documento Comercial</h2>
-              <button onClick={() => setSelectedRental(null)} className="p-4 hover:bg-white rounded-full transition-all text-slate-400 hover:text-slate-900"><X size={24}/></button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-16 md:p-24 bg-white text-slate-800" id="budget-print-area">
-               <div className="flex flex-col md:flex-row justify-between items-start border-b-2 border-slate-900 pb-12 gap-10">
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[200] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-4xl rounded-[50px] shadow-2xl my-8">
+            <div id="budget-print-area" className="bg-white p-16" style={{ minHeight: 'auto' }}>
+               <div className="flex flex-col md:flex-row justify-between items-start gap-10 pb-12 border-b-4 border-slate-900">
                   <div className="space-y-4">
                     <div className="w-24 h-24 rounded-[32px] overflow-hidden border-2 border-slate-900 mb-4">
                         {user?.profilePhotoUrl ? <img src={user.profilePhotoUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-100"/>}
@@ -260,6 +269,9 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
             </div>
 
             <div className="p-10 bg-slate-50 border-t flex justify-end gap-4 print:hidden">
+              <button onClick={() => setSelectedRental(null)} className="flex-1 md:flex-none flex items-center justify-center gap-3 bg-slate-200 text-slate-700 px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-slate-300 transition-all">
+                <X size={20}/> Fechar
+              </button>
               <button onClick={() => handleDownloadPDF('budget-print-area', `proposta-${selectedRental.customerName}`)} className="flex-1 md:flex-none flex items-center justify-center gap-3 bg-slate-900 text-white px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-slate-200 active:scale-95">
                 <Download size={20}/> Baixar Proposta (PDF)
               </button>
