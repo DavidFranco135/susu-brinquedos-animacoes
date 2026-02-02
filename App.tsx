@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { initializeApp } from "firebase/app";
@@ -16,7 +15,8 @@ import {
   doc, 
   setDoc, 
   query,
-  orderBy
+  orderBy,
+  deleteDoc
 } from "firebase/firestore";
 
 import Layout from './components/Layout';
@@ -60,19 +60,17 @@ const Login: React.FC = () => {
     setError('');
     
     try {
-      // Tenta fazer o login
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err: any) {
-      // Se o erro for que o usuário não existe e for o e-mail do admin, cria automaticamente
       if ((err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') && email === 'admsusu@gmail.com') {
         try {
           await createUserWithEmailAndPassword(auth, email, password);
-          return; // O onAuthStateChanged lidará com o resto
+          return;
         } catch (createErr: any) {
-          setError('Erro ao criar conta administrativa. Verifique o console do Firebase.');
+          setError('Erro ao criar conta administrativa.');
         }
       } else {
-        setError('E-mail ou senha inválidos. Verifique se o provedor E-mail/Senha está ativo no Firebase.');
+        setError('E-mail ou senha inválidos.');
       }
     } finally {
       setLoading(false);
@@ -102,7 +100,6 @@ const Login: React.FC = () => {
           <button type="submit" disabled={loading} className="w-full bg-gradient-to-br from-cyan-400 to-blue-600 text-white font-black py-5 rounded-2xl hover:shadow-2xl hover:scale-[1.02] transition-all shadow-xl shadow-blue-100 uppercase tracking-widest text-sm flex items-center justify-center gap-3">
             {loading ? <Loader2 className="animate-spin" size={20}/> : 'Entrar no Sistema'}
           </button>
-          <p className="text-[9px] text-center text-slate-400 font-bold uppercase mt-4">Nota: O primeiro acesso do administrador cria a conta automaticamente.</p>
         </form>
       </div>
     </div>
@@ -116,6 +113,7 @@ const App: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
+  const [staff, setStaff] = useState<User[]>([]); // ESTADO ADICIONADO
   const [categories, setCategories] = useState<string[]>(['Infláveis', 'Animação / Recreação', 'Eletrônicos', 'Mesa/Jogos', 'Cama Elástica', 'Espaço Kids', 'Outros']);
   const [company, setCompany] = useState<CompanyType>({
     name: 'SUSU Animações e Brinquedos LTDA',
@@ -144,7 +142,6 @@ const App: React.FC = () => {
             setDoc(userDocRef, userData);
           }
           setUser(userData);
-          // Sincroniza com localStorage para compatibilidade com componentes que ainda usam getItem('susu_user')
           localStorage.setItem('susu_user', JSON.stringify(userData));
         });
       } else {
@@ -183,8 +180,13 @@ const App: React.FC = () => {
       if (docSnap.exists()) setCategories(docSnap.data().list || []);
     });
 
+    // LISTENER DE STAFF ADICIONADO
+    const unsubStaff = onSnapshot(collection(db, "users"), (snap) => {
+      setStaff(snap.docs.map(d => ({ ...d.data(), id: d.id } as User)));
+    });
+
     return () => {
-      unsubToys(); unsubCustomers(); unsubRentals(); unsubFinancial(); unsubCompany(); unsubCategories();
+      unsubToys(); unsubCustomers(); unsubRentals(); unsubFinancial(); unsubCompany(); unsubCategories(); unsubStaff();
     };
   }, [user]);
 
@@ -196,10 +198,6 @@ const App: React.FC = () => {
 
   const handleUpdateCompany = (updatedCompany: CompanyType) => {
     setDoc(doc(db, "settings", "company"), updatedCompany);
-  };
-
-  const handleUpdateCategories = (newList: string[]) => {
-    setDoc(doc(db, "settings", "categories"), { list: newList });
   };
 
   if (initializing) {
@@ -220,6 +218,7 @@ const App: React.FC = () => {
             <Layout user={user} onLogout={handleLogout} onUpdateUser={handleUpdateUser}>
               <Routes>
                 <Route path="/" element={user.role === UserRole.ADMIN ? <Dashboard rentals={rentals} toysCount={toys.length} transactions={transactions} /> : <Navigate to="/reservas" />} />
+                
                 <Route path="/reservas" element={
                   <Rentals 
                     rentals={rentals} 
@@ -233,25 +232,20 @@ const App: React.FC = () => {
                   />
                 } />
                
-<Route path="/brinquedos" element={
-  user.role === UserRole.ADMIN ? (
-    <Inventory 
-      toys={toys} 
-      setToys={(action: any) => {
-        const next = typeof action === 'function' ? action(toys) : action;
-        setToys(next); // Atualiza o estado local
-        // Salva no Firebase
-        next.forEach((t: Toy) => {
-          setDoc(doc(db, "toys", t.id), t);
-        });
-      }} 
-      categories={categories} 
-      setCategories={setCategories} 
-    />
-  ) : (
-    <Navigate to="/reservas" />
-  )
-} />
+                <Route path="/brinquedos" element={
+                  user.role === UserRole.ADMIN ? (
+                    <Inventory 
+                      toys={toys} 
+                      setToys={(action: any) => {
+                        const next = typeof action === 'function' ? action(toys) : action;
+                        next.forEach((t: Toy) => setDoc(doc(db, "toys", t.id), t));
+                      }} 
+                      categories={categories} 
+                      setCategories={(cats) => setDoc(doc(db, "settings", "categories"), { list: cats })} 
+                    />
+                  ) : <Navigate to="/reservas" />
+                } />
+
                 <Route path="/clientes" element={
                   <CustomersPage 
                     customers={customers} 
@@ -261,45 +255,44 @@ const App: React.FC = () => {
                     }} 
                   />
                 } />
+
                 <Route path="/disponibilidade" element={<Availability rentals={rentals} toys={toys} />} />
+                
                 <Route path="/orcamentos" element={<BudgetsPage rentals={rentals} setRentals={(action: any) => {
                     const next = typeof action === 'function' ? action(rentals) : action;
                     next.forEach((r: Rental) => setDoc(doc(db, "rentals", r.id), r));
                 }} customers={customers} toys={toys} company={company} />} />
+
                 <Route path="/financeiro" element={user.role === UserRole.ADMIN ? <Financial rentals={rentals} setRentals={()=>{}} transactions={transactions} setTransactions={(action: any) => {
                     const next = typeof action === 'function' ? action(transactions) : action;
                     next.forEach((t: FinancialTransaction) => setDoc(doc(db, "transactions", t.id), t));
                 }} /> : <Navigate to="/reservas" />} />
+                
                 <Route path="/contratos" element={<DocumentsPage type="contract" rentals={rentals} customers={customers} company={company} />} />
                 <Route path="/recibos" element={<DocumentsPage type="receipt" rentals={rentals} customers={customers} company={company} />} />
-               <Route path="/colaboradores" element={
-  user.role === UserRole.ADMIN ? (
-    <Staff 
-      staff={staff.filter(u => u.role !== UserRole.ADMIN || u.email !== 'admsusu@gmail.com')} 
-      setStaff={(action: any) => {
-        // Resolve a ação (seja ela uma função ou um novo array)
-        const nextStaff = typeof action === 'function' ? action(staff) : action;
-        
-        // 1. Identifica se um usuário foi removido para deletar do Firebase
-        if (nextStaff.length < staff.length) {
-          const removed = staff.find(u => !nextStaff.find(n => n.id === u.id));
-          if (removed) {
-             // Importar deleteDoc e doc se necessário
-             deleteDoc(doc(db, "users", removed.id));
-          }
-        }
+                
+                <Route path="/colaboradores" element={
+                  user.role === UserRole.ADMIN ? (
+                    <Staff 
+                      staff={staff.filter(u => u.email !== 'admsusu@gmail.com')} 
+                      setStaff={(action: any) => {
+                        const nextStaff = typeof action === 'function' ? action(staff) : action;
+                        
+                        // Deleta se alguém foi removido
+                        if (nextStaff.length < staff.length) {
+                          const removed = staff.find(u => !nextStaff.find(n => n.id === u.id));
+                          if (removed) deleteDoc(doc(db, "users", removed.id));
+                        }
 
-        // 2. Salva ou atualiza os usuários no Firebase
-        nextStaff.forEach((u: User) => {
-          setDoc(doc(db, "users", u.id), u);
-        });
-      }} 
-    />
-  ) : (
-    <Navigate to="/reservas" />
-  )
-} />
+                        // Salva/Atualiza
+                        nextStaff.forEach((u: User) => setDoc(doc(db, "users", u.id), u));
+                      }} 
+                    />
+                  ) : <Navigate to="/reservas" />
+                } />
+
                 <Route path="/configuracoes" element={user.role === UserRole.ADMIN ? <AppSettings company={company} setCompany={handleUpdateCompany} user={user} onUpdateUser={handleUpdateUser} /> : <Navigate to="/reservas" />} />
+                
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Layout>
