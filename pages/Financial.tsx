@@ -1,9 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, 
-  BarChart, Bar, AreaChart, Area, PieChart, Pie, Legend, ComposedChart, Line
+  BarChart, Bar, AreaChart, Area, PieChart, Pie, Legend, LineChart, Line
 } from 'recharts';
-import { Wallet, TrendingUp, TrendingDown, Plus, X, Filter, Download, DollarSign, ChevronRight, PieChart as PieIcon, Activity, BarChart3, Clock, CheckCircle2, AlertCircle, ArrowUpRight } from 'lucide-react';
+import { 
+  Wallet, TrendingUp, TrendingDown, Plus, X, DollarSign, 
+  ArrowUpRight, ArrowDownRight, Activity, Calendar, PieChart as PieIcon
+} from 'lucide-react';
 import { FinancialTransaction, Rental, RentalStatus, User, PaymentMethod } from '../types';
 
 interface Props {
@@ -13,178 +16,217 @@ interface Props {
   setTransactions: React.Dispatch<React.SetStateAction<FinancialTransaction[]>>;
 }
 
-const Financial: React.FC<Props> = ({ rentals, setRentals, transactions, setTransactions }) => {
+const Financial: React.FC<Props> = ({ rentals, transactions, setTransactions }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [detailModal, setDetailModal] = useState<{ isOpen: boolean; type: 'INCOME' | 'EXPENSE' | 'PROFIT' | 'PENDING' | null }>({
-    isOpen: false,
-    type: null
-  });
-  
   const now = new Date();
   const [filterMonth, setFilterMonth] = useState<string>(String(now.getMonth() + 1).padStart(2, '0'));
   const [filterYear, setFilterYear] = useState(String(now.getFullYear()));
-  const userStr = localStorage.getItem('susu_user');
-  const user: User | null = userStr ? JSON.parse(userStr) : null;
-  const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
-  const filteredData = useMemo(() => {
-    const yearMatch = (date: string) => date.startsWith(filterYear);
-    const monthMatch = (date: string) => filterMonth === 'ALL' || date.includes(`-${filterMonth}-`);
+  // Lógica de Cálculos de Resumo
+  const stats = useMemo(() => {
+    const periodTransactions = transactions.filter(t => t.date.startsWith(`${filterYear}-${filterMonth}`));
+    const periodRentals = rentals.filter(r => r.date.startsWith(`${filterYear}-${filterMonth}`) && r.status !== RentalStatus.CANCELLED);
+
+    const extraIncome = periodTransactions.filter(t => t.type === 'INCOME').reduce((acc, t) => acc + t.value, 0);
+    // Soma o total se concluído ou apenas a entrada se pendente
+    const rentalIncome = periodRentals.reduce((acc, r) => acc + (r.status === RentalStatus.COMPLETED ? r.totalValue : r.entryValue), 0);
+    
+    const income = extraIncome + rentalIncome;
+    const expense = periodTransactions.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + t.value, 0);
+
     return {
-      rentals: rentals.filter(r => yearMatch(r.date) && monthMatch(r.date)),
-      transactions: transactions.filter(t => yearMatch(t.date) && monthMatch(t.date))
+      income,
+      expense,
+      profit: income - expense,
+      pending: periodRentals.filter(r => r.status !== RentalStatus.COMPLETED).reduce((acc, r) => acc + (r.totalValue - r.entryValue), 0)
     };
-  }, [rentals, transactions, filterYear, filterMonth]);
+  }, [rentals, transactions, filterMonth, filterYear]);
 
-  const realizedIncomeEntries = useMemo(() => {
-    const entries: any[] = [];
-    filteredData.rentals.forEach(r => {
-      if (r.status === RentalStatus.CANCELLED) return;
-      if (r.entryValue > 0) entries.push({ id: `s-${r.id}`, date: r.date, description: `Sinal: ${r.customerName}`, value: r.entryValue, type: 'INCOME' });
-      if (r.status === RentalStatus.COMPLETED) {
-        const balance = r.totalValue - (r.entryValue || 0);
-        if (balance > 0) entries.push({ id: `l-${r.id}`, date: r.date, description: `Saldo: ${r.customerName}`, value: balance, type: 'INCOME' });
-      }
+  // Dados para o Gráfico de Área (Fluxo Diário)
+  const chartData = useMemo(() => {
+    const daysInMonth = new Date(Number(filterYear), Number(filterMonth), 0).getDate();
+    return Array.from({ length: daysInMonth }, (_, i) => {
+      const day = String(i + 1).padStart(2, '0');
+      const dateStr = `${filterYear}-${filterMonth}-${day}`;
+      
+      const tIn = transactions.filter(t => t.date === dateStr && t.type === 'INCOME').reduce((acc, t) => acc + t.value, 0);
+      const rIn = rentals.filter(r => r.date === dateStr && r.status !== RentalStatus.CANCELLED)
+                         .reduce((acc, r) => acc + (r.status === RentalStatus.COMPLETED ? r.totalValue : r.entryValue), 0);
+      const exp = transactions.filter(t => t.date === dateStr && t.type === 'EXPENSE').reduce((acc, t) => acc + t.value, 0);
+
+      return {
+        name: day,
+        receita: tIn + rIn,
+        despesa: exp
+      };
     });
-    filteredData.transactions.filter(t => t.type !== 'EXPENSE').forEach(t => entries.push({ ...t, value: Number(t.value) }));
-    return entries.sort((a, b) => b.date.localeCompare(a.date));
-  }, [filteredData]);
+  }, [rentals, transactions, filterMonth, filterYear]);
 
-  const totalRealizedIncome = useMemo(() => realizedIncomeEntries.reduce((acc, e) => acc + e.value, 0), [realizedIncomeEntries]);
-  const totalExpenses = useMemo(() => filteredData.transactions.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + Number(t.value), 0), [filteredData]);
-  const netProfit = totalRealizedIncome - totalExpenses;
-  const profitMargin = totalRealizedIncome > 0 ? (netProfit / totalRealizedIncome) * 100 : 0;
-  const totalPending = useMemo(() => filteredData.rentals.filter(r => r.status !== RentalStatus.CANCELLED && r.status !== RentalStatus.COMPLETED).reduce((acc, r) => acc + (r.totalValue - (r.entryValue || 0)), 0), [filteredData]);
+  // Função do Botão "Novo Lançamento" (Corrigida)
+  const handleAddTransaction = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    
+    const newTransaction: FinancialTransaction = {
+      id: `t${Date.now()}`, // Gera ID único para o Firebase
+      description: formData.get('description') as string,
+      value: Number(formData.get('value')),
+      type: formData.get('type') as 'INCOME' | 'EXPENSE',
+      date: formData.get('date') as string,
+      category: formData.get('category') as string,
+      paymentMethod: 'PIX'
+    };
 
-  const expenseByCategory = useMemo(() => {
-    const cats: Record<string, number> = {};
-    filteredData.transactions.filter(t => t.type === 'EXPENSE').forEach(t => {
-        const cat = t.category || 'Outros';
-        cats[cat] = (cats[cat] || 0) + Number(t.value);
-    });
-    return Object.entries(cats).map(([name, value]) => ({ name, value }));
-  }, [filteredData]);
-
-  const monthlyData = useMemo(() => {
-    return ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].map((m, i) => {
-      const mStr = String(i+1).padStart(2,'0');
-      const mRentals = rentals.filter(r => r.date.includes(`${filterYear}-${mStr}`));
-      const mTrans = transactions.filter(t => t.date.includes(`${filterYear}-${mStr}`));
-      const inc = mRentals.reduce((acc, r) => acc + (r.status === RentalStatus.COMPLETED ? r.totalValue : r.entryValue), 0) + 
-                  mTrans.filter(t => t.type !== 'EXPENSE').reduce((acc, t) => acc + Number(t.value), 0);
-      const exp = mTrans.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + Number(t.value), 0);
-      return { name: m, receita: inc, lucro: inc - exp };
-    });
-  }, [rentals, transactions, filterYear]);
-
-  const handleSettleDebt = (rentalId: string) => {
-    if (!confirm("Confirmar quitação?")) return;
-    setRentals(prev => prev.map(r => r.id === rentalId ? { ...r, status: RentalStatus.COMPLETED, entryValue: r.totalValue } : r));
+    setTransactions(prev => [...prev, newTransaction]);
+    setIsModalOpen(false);
   };
 
-  const StatCard = ({ title, value, sub, icon, color, type, isMoney = true }: any) => (
-    <div onClick={() => type && setDetailModal({ isOpen: true, type })} className={`bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm transition-all group relative overflow-hidden ${type ? 'cursor-pointer hover:shadow-xl hover:-translate-y-1' : ''}`}>
-      <div className={`absolute top-0 right-0 w-32 h-32 bg-${color}-50 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform`}></div>
-      <div className="relative z-10">
-        <div className={`p-4 bg-${color}-50 text-${color}-600 w-fit rounded-2xl mb-6`}>{icon}</div>
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{title}</p>
-        <h3 className="text-2xl font-black text-slate-800">{isMoney ? 'R$ ' : ''}{value.toLocaleString('pt-BR', { minimumFractionDigits: isMoney ? 2 : 1 })}{!isMoney && '%'}</h3>
-        <p className={`text-[10px] font-bold mt-2 uppercase tracking-tight flex items-center gap-1 text-${color}-500`}>{sub} {type && <ChevronRight size={12}/>}</p>
-      </div>
-    </div>
-  );
-
   return (
-    <div className="space-y-10 animate-in fade-in duration-500 pb-20">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="space-y-8 pb-20 animate-in fade-in duration-500">
+      {/* Header */}
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-4xl font-black text-slate-800 tracking-tight">Painel Financeiro</h1>
-          <p className="text-slate-500 font-medium">Controle de lucros e despesas.</p>
+          <h1 className="text-3xl font-black uppercase tracking-tighter text-slate-800">Financeiro</h1>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+            <Activity size={12} className="text-blue-500"/> Controle de Fluxo de Caixa
+          </p>
         </div>
-        <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-blue-700 transition-all flex items-center gap-2">
+
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-slate-100">
+             <select 
+               className="bg-transparent border-0 px-4 py-2 font-bold text-xs outline-none"
+               value={filterMonth} onChange={e => setFilterMonth(e.target.value)}
+             >
+               {['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => <option key={m} value={m}>{m}</option>)}
+             </select>
+             <select 
+               className="bg-transparent border-0 px-4 py-2 font-bold text-xs outline-none border-l border-slate-100"
+               value={filterYear} onChange={e => setFilterYear(e.target.value)}
+             >
+               {['2024','2025','2026'].map(y => <option key={y} value={y}>{y}</option>)}
+             </select>
+          </div>
+          
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="flex-1 md:flex-none bg-blue-600 text-white px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95"
+          >
             <Plus size={18} /> Novo Lançamento
-        </button>
+          </button>
+        </div>
       </header>
 
-      <div className="bg-white p-6 rounded-[32px] border flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
-        <div className="flex items-center gap-3">
-          <Filter size={18} className="text-slate-400" />
-          <select className="bg-slate-50 px-4 py-2 rounded-xl font-bold border-0 text-sm" value={filterMonth} onChange={e=>setFilterMonth(e.target.value)}>
-            <option value="ALL">TODOS OS MESES</option>
-            {['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => (
-              <option key={m} value={m}>{new Date(2000, Number(m)-1).toLocaleString('pt-BR', {month: 'long'})}</option>
-            ))}
-          </select>
-          <select className="bg-slate-50 px-4 py-2 rounded-xl font-bold border-0 text-sm" value={filterYear} onChange={e=>setFilterYear(e.target.value)}>
-            {[2024, 2025, 2026].map(y => <option key={y} value={y.toString()}>{y}</option>)}
-          </select>
+      {/* Cards de Resumo */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform"><TrendingUp size={48}/></div>
+          <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Receitas</p>
+          <p className="text-2xl font-black text-emerald-600">R$ {stats.income.toLocaleString('pt-BR')}</p>
         </div>
-        <div className="text-right">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saldo em Caixa</p>
-            <p className="text-xl font-black text-emerald-600">R$ {netProfit.toLocaleString('pt-BR')}</p>
+
+        <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform"><TrendingDown size={48}/></div>
+          <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Despesas</p>
+          <p className="text-2xl font-black text-red-500">R$ {stats.expense.toLocaleString('pt-BR')}</p>
+        </div>
+
+        <div className="bg-slate-900 p-6 rounded-[32px] shadow-xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-20 text-blue-400"><DollarSign size={48}/></div>
+          <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Lucro Estimado</p>
+          <p className="text-2xl font-black text-white">R$ {stats.profit.toLocaleString('pt-BR')}</p>
+        </div>
+
+        <div className="bg-blue-50 p-6 rounded-[32px] border border-blue-100 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-20 text-blue-600"><Calendar size={48}/></div>
+          <p className="text-[10px] font-black text-blue-400 uppercase mb-1">A Receber</p>
+          <p className="text-2xl font-black text-blue-700">R$ {stats.pending.toLocaleString('pt-BR')}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <StatCard title="Entradas" value={totalRealizedIncome} sub="Receita" icon={<TrendingUp size={24}/>} color="emerald" type="INCOME" />
-        <StatCard title="Saídas" value={totalExpenses} sub="Gastos" icon={<TrendingDown size={24}/>} color="red" type="EXPENSE" />
-        <StatCard title="A Receber" value={totalPending} sub="Pendentes" icon={<Clock size={24}/>} color="amber" type="PENDING" />
-        <StatCard title="Margem" value={profitMargin} sub="Lucratividade" icon={<Activity size={24}/>} color="purple" type="PROFIT" isMoney={false} />
-        <StatCard title="Lucro Líquido" value={netProfit} sub="Líquido" icon={<DollarSign size={24}/>} color="blue" type="PROFIT" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-        <div className="bg-white p-8 rounded-[50px] border border-slate-100 shadow-sm">
-          <h3 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-3"><div className="w-1.5 h-6 bg-red-500 rounded-full" /> Gastos / Categoria</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={expenseByCategory} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                  {expenseByCategory.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip /><Legend />
-              </PieChart>
-            </ResponsiveContainer>
+      {/* Gráfico Visual Principal */}
+      <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
+        <div className="flex justify-between items-center mb-8">
+          <h3 className="font-black uppercase text-slate-800 text-sm tracking-widest flex items-center gap-2">
+            <Activity size={18} className="text-blue-500"/> Fluxo Diário de Caixa
+          </h3>
+          <div className="flex gap-4 text-[10px] font-bold uppercase">
+             <span className="flex items-center gap-1 text-emerald-500"><div className="w-2 h-2 rounded-full bg-emerald-500"/> Receita</span>
+             <span className="flex items-center gap-1 text-red-400"><div className="w-2 h-2 rounded-full bg-red-400"/> Despesa</span>
           </div>
         </div>
-        <div className="bg-white p-8 rounded-[50px] border border-slate-100 shadow-sm lg:col-span-2">
-          <h3 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-3"><div className="w-1.5 h-6 bg-blue-600 rounded-full" /> Performance Mensal</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                <YAxis axisLine={false} tickLine={false} />
-                <Tooltip />
-                <Bar dataKey="receita" fill="#10B981" radius={[4, 4, 0, 0]} barSize={20} />
-                <Line type="monotone" dataKey="lucro" stroke="#3B82F6" strokeWidth={3} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
+        <div className="h-[300px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="colorRec" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold', fill: '#94a3b8'}} />
+              <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold', fill: '#94a3b8'}} />
+              <Tooltip 
+                contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', padding: '15px'}}
+                itemStyle={{fontSize: '12px', fontWeight: '900', textTransform: 'uppercase'}}
+              />
+              <Area type="monotone" dataKey="receita" stroke="#10b981" strokeWidth={4} fillOpacity={1} fill="url(#colorRec)" />
+              <Area type="monotone" dataKey="despesa" stroke="#f87171" strokeWidth={4} fill="none" strokeDasharray="5 5" />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
-      {detailModal.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[400] flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-4xl rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                <div className="p-10 border-b flex justify-between items-center">
-                    <h2 className="text-2xl font-black text-slate-800 uppercase">Detalhamento</h2>
-                    <button onClick={() => setDetailModal({ isOpen: false, type: null })} className="p-4 bg-slate-50 rounded-2xl text-slate-400"><X size={24}/></button>
+      {/* Modal Novo Lançamento (Consertado) */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-lg rounded-[40px] p-10 shadow-2xl overflow-hidden relative">
+            <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-800 transition-colors"><X/></button>
+            
+            <h2 className="text-2xl font-black uppercase tracking-tighter mb-8">Novo Lançamento</h2>
+            
+            <form onSubmit={handleAddTransaction} className="space-y-6">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Descrição do Lançamento</label>
+                <input required name="description" placeholder="Ex: Manutenção Pula-Pula" className="w-full p-4 bg-slate-50 rounded-2xl border-0 font-bold outline-none focus:ring-2 focus:ring-blue-500/20" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Valor (R$)</label>
+                  <input required name="value" type="number" step="0.01" placeholder="0,00" className="w-full p-4 bg-slate-50 rounded-2xl border-0 font-bold outline-none" />
                 </div>
-                <div className="flex-1 overflow-y-auto p-10">
-                    <table className="w-full text-left">
-                        <thead><tr className="text-[11px] font-black text-slate-400 uppercase border-b"><th className="pb-4">Data</th><th className="pb-4">Descrição</th><th className="pb-4 text-right">Valor</th></tr></thead>
-                        <tbody className="divide-y divide-slate-50">
-                            {detailModal.type === 'INCOME' && realizedIncomeEntries.map(e => (
-                                <tr key={e.id}><td className="py-4 text-sm">{new Date(e.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td className="py-4 font-bold uppercase text-xs">{e.description}</td><td className="py-4 text-right font-black text-emerald-600">R$ {e.value.toLocaleString('pt-BR')}</td></tr>
-                            ))}
-                            {detailModal.type === 'EXPENSE' && filteredData.transactions.filter(t => t.type === 'EXPENSE').map(t => (
-                                <tr key={t.id}><td className="py-4 text-sm">{new Date(t.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td><td className="py-4 font-bold uppercase text-xs">{t.description}</td><td className="py-4 text-right font-black text-red-500">R$ {Number(t.value).toLocaleString('pt-BR')}</td></tr>
-                            ))}
-                        </tbody>
-                    </table>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Tipo</label>
+                  <select name="type" className="w-full p-4 bg-slate-50 rounded-2xl border-0 font-bold outline-none">
+                    <option value="EXPENSE">Despesa (Saída)</option>
+                    <option value="INCOME">Receita Extra (Entrada)</option>
+                  </select>
                 </div>
-            </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Data</label>
+                  <input required name="date" type="date" defaultValue={now.toISOString().split('T')[0]} className="w-full p-4 bg-slate-50 rounded-2xl border-0 font-bold outline-none" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Categoria</label>
+                  <select name="category" className="w-full p-4 bg-slate-50 rounded-2xl border-0 font-bold outline-none">
+                    <option value="Manutenção">Manutenção</option>
+                    <option value="Equipe">Pagamento Equipe</option>
+                    <option value="Marketing">Marketing/Anúncios</option>
+                    <option value="Outros">Outros</option>
+                  </select>
+                </div>
+              </div>
+
+              <button type="submit" className="w-full bg-blue-600 text-white py-5 rounded-[24px] font-black uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">
+                Salvar no Sistema
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </div>
