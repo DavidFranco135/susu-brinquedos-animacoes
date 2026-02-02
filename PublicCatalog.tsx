@@ -301,7 +301,8 @@ const PublicCatalog: React.FC = () => {
               
               <div className="border-t border-slate-100 pt-4 flex items-center justify-between flex-wrap gap-4">
                 <div>
-                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Valor da Locação</p>
+                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Valor da Locação
+                  a partir de:</p>
                   <p className="text-3xl font-black text-blue-600">R$ {viewingDescription.price.toLocaleString('pt-BR')}</p>
                 </div>
                 <div className="flex gap-2">
