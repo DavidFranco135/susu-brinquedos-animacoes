@@ -1,20 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { initializeApp } from "firebase/app";
+import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
 import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
-  onAuthStateChanged, 
-  signOut 
-} from "firebase/auth";
-import { 
-  getFirestore, 
-  collection, 
-  onSnapshot, 
-  doc, 
-  setDoc, 
-  query,
-  orderBy
+  getFirestore, collection, onSnapshot, doc, setDoc, query, orderBy, deleteDoc 
 } from "firebase/firestore";
 
 import Layout from './components/Layout';
@@ -52,105 +41,95 @@ const App: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [toys, setToys] = useState<Toy[]>([]);
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
-  const [categories, setCategories] = useState<string[]>(['Geral', 'Infláveis', 'Jogos', 'Alimentação']);
+  const [categories, setCategories] = useState<string[]>(['Geral']);
   const [company, setCompany] = useState<CompanyType>({
     name: 'SUSU Animações',
-    logoUrl: '',
-    address: '',
-    phone: '',
-    email: '',
-    contractTerms: ''
+    logoUrl: '', address: '', phone: '', email: '', contractTerms: ''
   });
 
   useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser) {
-        const savedUser = localStorage.getItem('susu_user');
-        setUser(savedUser ? JSON.parse(savedUser) : { id: firebaseUser.uid, email: firebaseUser.email, name: 'Admin', role: UserRole.ADMIN });
-      } else {
-        setUser(null);
-      }
+    const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
+      if (fbUser) {
+        const local = localStorage.getItem('susu_user');
+        setUser(local ? JSON.parse(local) : { id: fbUser.uid, email: fbUser.email, name: 'Admin', role: UserRole.ADMIN });
+      } else { setUser(null); }
       setLoading(false);
     });
 
-    // Sync Collections
-    const unsubRentals = onSnapshot(query(collection(db, \"rentals\"), orderBy(\"date\", \"desc\")), (snap) => {
+    // Escutando mudanças em tempo real no Firebase
+    const unsubRentals = onSnapshot(collection(db, "rentals"), (snap) => {
       setRentals(snap.docs.map(d => d.data() as Rental));
     });
-    const unsubCustomers = onSnapshot(collection(db, \"customers\"), (snap) => {
+    const unsubCustomers = onSnapshot(collection(db, "customers"), (snap) => {
       setCustomers(snap.docs.map(d => d.data() as Customer));
     });
-    const unsubToys = onSnapshot(collection(db, \"toys\"), (snap) => {
+    const unsubToys = onSnapshot(collection(db, "toys"), (snap) => {
       setToys(snap.docs.map(d => d.data() as Toy));
     });
-    const unsubTransactions = onSnapshot(collection(db, \"transactions\"), (snap) => {
+    const unsubTransactions = onSnapshot(collection(db, "transactions"), (snap) => {
       setTransactions(snap.docs.map(d => d.data() as FinancialTransaction));
     });
-    const unsubCompany = onSnapshot(doc(db, \"settings\", \"company\"), (snap) => {
+    const unsubCats = onSnapshot(doc(db, "settings", "categories"), (snap) => {
+      if (snap.exists()) setCategories(snap.data().list || ['Geral']);
+    });
+    const unsubCompany = onSnapshot(doc(db, "settings", "company"), (snap) => {
       if (snap.exists()) setCompany(snap.data() as CompanyType);
     });
-    const unsubCats = onSnapshot(doc(db, \"settings\", \"categories\"), (snap) => {
-      if (snap.exists()) setCategories(snap.data().list);
-    });
 
-    return () => {
-      unsubAuth(); unsubRentals(); unsubCustomers(); unsubToys(); unsubTransactions(); unsubCompany(); unsubCats();
-    };
+    return () => { unsubAuth(); unsubRentals(); unsubCustomers(); unsubToys(); unsubTransactions(); unsubCats(); unsubCompany(); };
   }, []);
 
-  const handleUpdateCompany = (newCompany: CompanyType) => {
-    setCompany(newCompany);
-    setDoc(doc(db, \"settings\", \"company\"), newCompany);
+  // Funções de Persistência (Cloud)
+  const saveToFirebase = async (col: string, data: any) => {
+    await setDoc(doc(db, col, data.id), data);
   };
 
   const handleUpdateCategories = (newList: string[]) => {
     setCategories(newList);
-    setDoc(doc(db, \"settings\", \"categories\"), { list: newList });
+    setDoc(doc(db, "settings", "categories"), { list: newList });
   };
 
-  if (loading) return (
-    <div className=\"min-h-screen bg-slate-50 flex items-center justify-center\">
-      <Loader2 className=\"animate-spin text-blue-600\" size={48} />
-    </div>
-  );
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
 
   return (
     <Router>
       <Routes>
-        <Route path=\"/resumo-publico/:id\" element={<PublicRentalSummary rentals={rentals} toys={toys} company={company} />} />
-        <Route path=\"/*\" element={
-          !user ? <Navigate to=\"/login\" /> : (
+        <Route path="/resumo-publico/:id" element={<PublicRentalSummary rentals={rentals} toys={toys} company={company} />} />
+        <Route path="/*" element={
+          !user ? <Navigate to="/login" /> : (
             <Layout user={user} onLogout={() => signOut(auth)} onUpdateUser={setUser}>
               <Routes>
-                <Route path=\"/\" element={<Dashboard rentals={rentals} toysCount={toys.length} transactions={transactions} />} />
-                <Route path=\"/clientes\" element={<CustomersPage customers={customers} setCustomers={(action: any) => {
+                <Route path="/" element={<Dashboard rentals={rentals} toysCount={toys.length} transactions={transactions} />} />
+                
+                <Route path="/clientes" element={<CustomersPage customers={customers} setCustomers={(action: any) => {
                   const next = typeof action === 'function' ? action(customers) : action;
-                  next.forEach((c: Customer) => setDoc(doc(db, \"customers\", c.id), c));
+                  next.forEach((c: Customer) => saveToFirebase("customers", c));
                 }} />} />
-                <Route path=\"/brinquedos\" element={<Inventory toys={toys} setToys={(action: any) => {
+
+                <Route path="/brinquedos" element={<Inventory toys={toys} categories={categories} setCategories={handleUpdateCategories} setToys={(action: any) => {
                   const next = typeof action === 'function' ? action(toys) : action;
-                  next.forEach((t: Toy) => setDoc(doc(db, \"toys\", t.id), t));
-                }} categories={categories} setCategories={handleUpdateCategories} />} />
-                <Route path=\"/disponibilidade\" element={<Availability rentals={rentals} toys={toys} />} />
-                <Route path=\"/reservas\" element={<Rentals 
+                  next.forEach((t: Toy) => saveToFirebase("toys", t));
+                }} />} />
+
+                <Route path="/reservas" element={<Rentals 
                   rentals={rentals} 
-                  setRentals={(action: any) => {
-                    const next = typeof action === 'function' ? action(rentals) : action;
-                    next.forEach((r: Rental) => setDoc(doc(db, \"rentals\", r.id), r));
-                  }} 
                   customers={customers} 
                   toys={toys} 
-                  categories={categories} // Passando as categorias dinâmicas
+                  categories={categories}
+                  setRentals={(action: any) => {
+                    const next = typeof action === 'function' ? action(rentals) : action;
+                    next.forEach((r: Rental) => saveToFirebase("rentals", r));
+                  }} 
                 />} />
-                <Route path=\"/orcamentos\" element={<BudgetsPage rentals={rentals} customers={customers} toys={toys} company={company} />} />
-                <Route path=\"/financeiro\" element={user.role === UserRole.ADMIN ? <Financial rentals={rentals} setRentals={()=>{}} transactions={transactions} setTransactions={(action: any) => {
-                    const next = typeof action === 'function' ? action(transactions) : action;
-                    next.forEach((t: FinancialTransaction) => setDoc(doc(db, \"transactions\", t.id), t));
-                }} /> : <Navigate to=\"/reservas\" />} />
-                <Route path=\"/contratos\" element={<DocumentsPage type=\"contract\" rentals={rentals} customers={customers} company={company} />} />
-                <Route path=\"/recibos\" element={<DocumentsPage type=\"receipt\" rentals={rentals} customers={customers} company={company} />} />
-                <Route path=\"/configuracoes\" element={user.role === UserRole.ADMIN ? <AppSettings company={company} setCompany={handleUpdateCompany} user={user} onUpdateUser={setUser} /> : <Navigate to=\"/reservas\" />} />
-                <Route path=\"*\" element={<Navigate to=\"/\" replace />} />
+
+                <Route path="/financeiro" element={<Financial rentals={rentals} transactions={transactions} setTransactions={(action: any) => {
+                  const next = typeof action === 'function' ? action(transactions) : action;
+                  next.forEach((t: FinancialTransaction) => saveToFirebase("transactions", t));
+                }} setRentals={()=>{}} />} />
+
+                <Route path="/configuracoes" element={<AppSettings company={company} setCompany={(c) => setDoc(doc(db, "settings", "company"), c)} user={user} onUpdateUser={setUser} />} />
+                <Route path="/disponibilidade" element={<Availability rentals={rentals} toys={toys} />} />
+                <Route path="/orcamentos" element={<BudgetsPage rentals={rentals} customers={customers} toys={toys} company={company} />} />
               </Routes>
             </Layout>
           )
