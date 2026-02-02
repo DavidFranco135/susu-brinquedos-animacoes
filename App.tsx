@@ -32,7 +32,6 @@ import PublicRentalSummary from './pages/PublicRentalSummary';
 import { Customer, Toy, Rental, User, UserRole, FinancialTransaction, CompanySettings as CompanyType } from './types';
 import { Loader2 } from 'lucide-react';
 
-// Configuração do Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyBUvwY-e7h0KZyFJv7n0ignpzlMUGJIurU",
   authDomain: "niklaus-b2b.firebaseapp.com",
@@ -42,7 +41,6 @@ const firebaseConfig = {
   appId: "1:367332768565:web:2f03f3747d337257917246"
 };
 
-// Inicialização única do Firebase para evitar erros de console
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -62,37 +60,63 @@ const App: React.FC = () => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const userDoc = doc(db, "users", firebaseUser.uid);
-        onSnapshot(userDoc, (docSnap) => {
+        const unsubUser = onSnapshot(userDoc, (docSnap) => {
           if (docSnap.exists()) {
             setUser(docSnap.data() as User);
           }
           setLoading(false);
         });
+        return () => unsubUser();
       } else {
         setUser(null);
         setLoading(false);
       }
     });
 
-    onSnapshot(query(collection(db, "toys")), (s) => setToys(s.docs.map(d => ({ ...d.data() as Toy, id: d.id }))));
-    onSnapshot(query(collection(db, "rentals"), orderBy("date", "desc")), (s) => setRentals(s.docs.map(d => ({ ...d.data() as Rental, id: d.id }))));
-    onSnapshot(query(collection(db, "customers")), (s) => setCustomers(s.docs.map(d => ({ ...d.data() as Customer, id: d.id }))));
-    onSnapshot(query(collection(db, "users")), (s) => setStaff(s.docs.map(d => ({ ...d.data() as User, id: d.id }))));
-    onSnapshot(query(collection(db, "transactions"), orderBy("date", "desc")), (s) => setTransactions(s.docs.map(d => ({ ...d.data() as FinancialTransaction, id: d.id }))));
-    onSnapshot(doc(db, "settings", "company"), (d) => d.exists() && setCompany(d.data() as CompanyType));
+    const unsubToys = onSnapshot(query(collection(db, "toys")), (s) => {
+      setToys(s.docs.map(d => ({ ...d.data() as Toy, id: d.id })));
+    });
+    
+    const unsubRentals = onSnapshot(query(collection(db, "rentals"), orderBy("date", "desc")), (s) => {
+      setRentals(s.docs.map(d => ({ ...d.data() as Rental, id: d.id })));
+    });
 
-    return () => unsubscribeAuth();
+    const unsubCust = onSnapshot(query(collection(db, "customers")), (s) => {
+      setCustomers(s.docs.map(d => ({ ...d.data() as Customer, id: d.id })));
+    });
+
+    const unsubStaff = onSnapshot(query(collection(db, "users")), (s) => {
+      setStaff(s.docs.map(d => ({ ...d.data() as User, id: d.id })));
+    });
+
+    const unsubTrans = onSnapshot(query(collection(db, "transactions"), orderBy("date", "desc")), (s) => {
+      setTransactions(s.docs.map(d => ({ ...d.data() as FinancialTransaction, id: d.id })));
+    });
+
+    const unsubSettings = onSnapshot(doc(db, "settings", "company"), (d) => {
+      if (d.exists()) setCompany(d.data() as CompanyType);
+    });
+
+    return () => {
+      unsubscribeAuth();
+      unsubToys();
+      unsubRentals();
+      unsubCust();
+      unsubStaff();
+      unsubTrans();
+      unsubSettings();
+    };
   }, []);
 
   const handleLogout = () => signOut(auth);
   const handleUpdateUser = (u: User) => setDoc(doc(db, "users", u.id), u);
   const handleUpdateCompany = (c: CompanyType) => setDoc(doc(db, "settings", "company"), c);
 
-  // FUNÇÃO QUE GARANTE QUE O ADMIN ACESSA TUDO E O COLABORADOR SÓ O PERMITIDO
+  // PROTEÇÃO CONTRA DADOS INDEFINIDOS NO CARREGAMENTO
   const hasAccess = (pageId: string) => {
     if (!user) return false;
-    if (user.role === UserRole.ADMIN) return true; // Se for ADMIN, ignora as travas
-    return user.allowedPages?.includes(pageId); // Se for COLABORADOR, checa a lista
+    if (user.role === UserRole.ADMIN) return true;
+    return user.allowedPages?.includes(pageId) || false;
   };
 
   if (loading) return (
@@ -110,32 +134,25 @@ const App: React.FC = () => {
           !user ? <Navigate to="/login" /> : (
             <Layout user={user} onLogout={handleLogout} onUpdateUser={handleUpdateUser}>
               <Routes>
-                <Route path="/" element={hasAccess('dashboard') ? <Dashboard toys={toys} rentals={rentals} transactions={transactions} /> : <Navigate to="/reservas" />} />
+                {/* Só renderiza as páginas se os dados básicos (toys/rentals) já existirem para evitar o erro .find() */}
+                <Route path="/" element={hasAccess('dashboard') ? <Dashboard toys={toys || []} rentals={rentals || []} transactions={transactions || []} /> : <Navigate to="/reservas" />} />
                 
-                <Route path="/estoque" element={hasAccess('toys') ? <Inventory toys={toys} setToys={setToys} categories={categories} setCategories={setCategories} /> : <Navigate to="/reservas" />} />
+                <Route path="/estoque" element={hasAccess('toys') ? <Inventory toys={toys || []} setToys={setToys} categories={categories} setCategories={setCategories} /> : <Navigate to="/reservas" />} />
                 
-                <Route path="/reservas" element={hasAccess('rentals') ? <Rentals rentals={rentals} setRentals={() => {}} toys={toys} customers={customers} /> : <Navigate to="/login" />} />
+                <Route path="/reservas" element={hasAccess('rentals') ? <Rentals rentals={rentals || []} setRentals={() => {}} toys={toys || []} customers={customers || []} /> : <Navigate to="/login" />} />
                 
-                <Route path="/disponibilidade" element={<Availability toys={toys} rentals={rentals} />} />
+                <Route path="/disponibilidade" element={<Availability toys={toys || []} rentals={rentals || []} />} />
                 
-                <Route path="/financeiro" element={hasAccess('financial') ? <Financial transactions={transactions} rentals={rentals} /> : <Navigate to="/reservas" />} />
+                <Route path="/financeiro" element={hasAccess('financial') ? <Financial transactions={transactions || []} rentals={rentals || []} /> : <Navigate to="/reservas" />} />
                 
-                <Route path="/clientes" element={hasAccess('customers') ? <CustomersPage customers={customers} rentals={rentals} /> : <Navigate to="/reservas" />} />
+                <Route path="/clientes" element={hasAccess('customers') ? <CustomersPage customers={customers || []} rentals={rentals || []} /> : <Navigate to="/reservas" />} />
                 
-                <Route path="/orcamentos" element={hasAccess('budgets') ? <BudgetsPage rentals={rentals} customers={customers} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
+                <Route path="/orcamentos" element={hasAccess('budgets') ? <BudgetsPage rentals={rentals || []} customers={customers || []} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
                 
-                <Route path="/contratos" element={hasAccess('documents') ? <DocumentsPage type="contract" rentals={rentals} customers={customers} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
-                <Route path="/recibos" element={hasAccess('documents') ? <DocumentsPage type="receipt" rentals={rentals} customers={customers} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
+                <Route path="/contratos" element={hasAccess('documents') ? <DocumentsPage type="contract" rentals={rentals || []} customers={customers || []} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
+                <Route path="/recibos" element={hasAccess('documents') ? <DocumentsPage type="receipt" rentals={rentals || []} customers={customers || []} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
 
-                {/* Áreas exclusivas de Configuração do Admin */}
-                <Route path="/colaboradores" element={user.role === UserRole.ADMIN ? <Staff staff={staff.filter(u => u.email !== 'admsusu@gmail.com')} setStaff={(a: any) => { 
-                  const n = typeof a === 'function' ? a(staff) : a; 
-                  if (n.length < staff.length) { 
-                    const r = staff.find(u => !n.find(nx => nx.id === u.id)); 
-                    if (r) deleteDoc(doc(db, "users", r.id)); 
-                  } 
-                  n.forEach((u: User) => setDoc(doc(db, "users", u.id), u)); 
-                }} /> : <Navigate to="/reservas" />} />
+                <Route path="/colaboradores" element={user.role === UserRole.ADMIN ? <Staff staff={staff} setStaff={() => {}} /> : <Navigate to="/reservas" />} />
 
                 <Route path="/configuracoes" element={user.role === UserRole.ADMIN ? <AppSettings company={company || {} as CompanyType} setCompany={handleUpdateCompany} user={user} onUpdateUser={handleUpdateUser} /> : <Navigate to="/reservas" />} />
                 
