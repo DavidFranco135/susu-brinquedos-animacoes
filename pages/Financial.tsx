@@ -49,7 +49,7 @@ const Financial: React.FC<FinancialProps> = ({ rentals = [], transactions = [], 
     });
 
     const receitas = filteredRentals.reduce((acc, r) => acc + (Number(r.entryValue) || 0), 0);
-    const despesas = filteredTrans.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+    const despesas = filteredTrans.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + (Number(t.value) || 0), 0);
     const aReceber = filteredRentals.reduce((acc, r) => acc + ((Number(r.totalValue) || 0) - (Number(r.entryValue) || 0)), 0);
     const lucro = receitas - despesas;
 
@@ -61,7 +61,7 @@ const Financial: React.FC<FinancialProps> = ({ rentals = [], transactions = [], 
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     return months.map((m, i) => {
       const r = stats.filteredRentals.filter(rent => new Date(rent.date + 'T00:00:00').getMonth() === i).reduce((acc, rent) => acc + (Number(rent.entryValue) || 0), 0);
-      const d = stats.filteredTrans.filter(t => t.type === 'EXPENSE' && new Date(t.date).getMonth() === i).reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+      const d = stats.filteredTrans.filter(t => t.type === 'EXPENSE' && new Date(t.date).getMonth() === i).reduce((acc, t) => acc + (Number(t.value) || 0), 0);
       const lucro = r - d;
       return { name: m, Entradas: r, Saídas: d, Lucro: lucro };
     });
@@ -79,7 +79,7 @@ const Financial: React.FC<FinancialProps> = ({ rentals = [], transactions = [], 
     const categories: {[key: string]: number} = {};
     stats.filteredTrans.filter(t => t.type === 'EXPENSE').forEach(t => {
       const cat = t.category || 'Outros';
-      categories[cat] = (categories[cat] || 0) + (Number(t.amount) || 0);
+      categories[cat] = (categories[cat] || 0) + (Number(t.value) || 0);
     });
     return Object.entries(categories).map(([name, value]) => ({ name, value }));
   }, [stats]);
@@ -89,7 +89,7 @@ const Financial: React.FC<FinancialProps> = ({ rentals = [], transactions = [], 
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     return months.map((m, i) => {
       const r = stats.filteredRentals.filter(rent => new Date(rent.date + 'T00:00:00').getMonth() === i).reduce((acc, rent) => acc + (Number(rent.entryValue) || 0), 0);
-      const d = stats.filteredTrans.filter(t => t.type === 'EXPENSE' && new Date(t.date).getMonth() === i).reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+      const d = stats.filteredTrans.filter(t => t.type === 'EXPENSE' && new Date(t.date).getMonth() === i).reduce((acc, t) => acc + (Number(t.value) || 0), 0);
       return { name: m, Lucro: r - d };
     });
   }, [stats]);
@@ -261,7 +261,7 @@ const Financial: React.FC<FinancialProps> = ({ rentals = [], transactions = [], 
                     <td className="py-3 font-bold opacity-60">{new Date(t.date).toLocaleDateString('pt-BR')}</td>
                     <td className="py-3 font-black">{t.description}</td>
                     <td className="py-3 uppercase text-[10px] opacity-60">{t.category}</td>
-                    <td className="py-3 text-right font-black text-red-700">R$ {(Number(t.amount) || 0).toLocaleString('pt-BR')}</td>
+                    <td className="py-3 text-right font-black text-red-700">R$ {(Number(t.value) || 0).toLocaleString('pt-BR')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -431,7 +431,7 @@ const Financial: React.FC<FinancialProps> = ({ rentals = [], transactions = [], 
               <tr key={t.id}>
                 <td className="px-8 py-4">{t.description}</td>
                 <td className="px-8 py-4 text-slate-400">{new Date(t.date).toLocaleDateString('pt-BR')}</td>
-                <td className="px-8 py-4 text-rose-500">- R$ {(Number(t.amount) || 0).toLocaleString('pt-BR')}</td>
+                <td className="px-8 py-4 text-rose-500">- R$ {(Number(t.value) || 0).toLocaleString('pt-BR')}</td>
               </tr>
             ))}
             {activeFilter === 'AReceber' && stats.filteredRentals.map(r => (
