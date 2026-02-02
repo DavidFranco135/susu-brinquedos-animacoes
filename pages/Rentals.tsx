@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, X, ChevronLeft, ChevronRight, Edit3, Calendar as CalendarIcon, List, CalendarDays, BarChart3, Clock, CheckCircle2, MapPin, UserPlus, FileSpreadsheet, Download, Phone, Share2, MessageCircle, Trash2, ClipboardList, Filter, DollarSign } from 'lucide-react';
 import { Rental, RentalStatus, Customer, Toy, User, UserRole, PaymentMethod } from '../types';
+import { deleteDoc, doc } from "firebase/firestore";
 
 interface RentalsProps {
   rentals: Rental[];
@@ -265,10 +266,17 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
     } : r));
   };
 
-  const handleDeleteRental = (id: string) => {
-    if (!confirm("Tem certeza que deseja APAGAR esta reserva permanentemente? Esta ação não pode ser desfeita.")) return;
+ const handleDeleteRental = async (id: string) => {
+  if (!confirm("Tem certeza que deseja APAGAR esta reserva permanentemente?")) return;
+  
+  try {
+    await deleteDoc(doc(db, "rentals", id));
     setRentals(prev => prev.filter(r => r.id !== id));
-  };
+  } catch (error) {
+    console.error("Erro ao excluir:", error);
+    alert("Erro ao excluir a reserva.");
+  }
+};
 
   const handleSendWhatsApp = (rental: Rental) => {
     const customer = customers.find(c => c.id === rental.customerId);
