@@ -272,7 +272,33 @@ const App: React.FC = () => {
                 }} /> : <Navigate to="/reservas" />} />
                 <Route path="/contratos" element={<DocumentsPage type="contract" rentals={rentals} customers={customers} company={company} />} />
                 <Route path="/recibos" element={<DocumentsPage type="receipt" rentals={rentals} customers={customers} company={company} />} />
-                <Route path="/colaboradores" element={user.role === UserRole.ADMIN ? <Staff staff={[]} setStaff={()=>{}} /> : <Navigate to="/reservas" />} />
+               <Route path="/colaboradores" element={
+  user.role === UserRole.ADMIN ? (
+    <Staff 
+      staff={staff.filter(u => u.role !== UserRole.ADMIN || u.email !== 'admsusu@gmail.com')} 
+      setStaff={(action: any) => {
+        // Resolve a ação (seja ela uma função ou um novo array)
+        const nextStaff = typeof action === 'function' ? action(staff) : action;
+        
+        // 1. Identifica se um usuário foi removido para deletar do Firebase
+        if (nextStaff.length < staff.length) {
+          const removed = staff.find(u => !nextStaff.find(n => n.id === u.id));
+          if (removed) {
+             // Importar deleteDoc e doc se necessário
+             deleteDoc(doc(db, "users", removed.id));
+          }
+        }
+
+        // 2. Salva ou atualiza os usuários no Firebase
+        nextStaff.forEach((u: User) => {
+          setDoc(doc(db, "users", u.id), u);
+        });
+      }} 
+    />
+  ) : (
+    <Navigate to="/reservas" />
+  )
+} />
                 <Route path="/configuracoes" element={user.role === UserRole.ADMIN ? <AppSettings company={company} setCompany={handleUpdateCompany} user={user} onUpdateUser={handleUpdateUser} /> : <Navigate to="/reservas" />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
