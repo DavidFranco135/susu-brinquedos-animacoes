@@ -22,6 +22,21 @@ import { User as UserIcon, Loader2, ExternalLink } from 'lucide-react';
 
 // ✅ ADICIONAR ESTA LINHA:
 import { auth, db } from './firebase';
+import { 
+  signInWithEmailAndPassword, 
+  onAuthStateChanged, 
+  signOut 
+} from "firebase/auth";
+
+import { 
+  collection, 
+  onSnapshot, 
+  doc, 
+  setDoc, 
+  query,
+  orderBy,
+  deleteDoc
+} from "firebase/firestore";
 // COMPONENTE DE LOGIN COM FUNDO PERSONALIZADO + BOTÃO CATÁLOGO
 const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
   const [email, setEmail] = useState('admsusu@gmail.com');
