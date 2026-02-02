@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Plus, X, ChevronLeft, ChevronRight, Edit3, Calendar as CalendarIcon, List, CalendarDays, BarChart3, Clock, CheckCircle2, MapPin, UserPlus, FileSpreadsheet, Download, Phone, Share2, MessageCircle, Trash2, ClipboardList, Filter, DollarSign } from 'lucide-react';
 import { Rental, RentalStatus, Customer, Toy, User, UserRole, PaymentMethod } from '../types';
 import { deleteDoc, doc } from "firebase/firestore";
-
+import { db } from '../firebase';
 interface RentalsProps {
   rentals: Rental[];
   setRentals: React.Dispatch<React.SetStateAction<Rental[]>>;
