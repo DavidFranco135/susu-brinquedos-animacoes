@@ -1,8 +1,7 @@
-
 import React, { useState, useRef } from 'react';
 import { Plus, Search, Edit3, X, Save, Upload, Trash2, Settings, Maximize } from 'lucide-react';
 import { Toy, ToyStatus, User, UserRole } from '../types';
-import { getFirestore, doc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, doc, deleteDoc, setDoc, addDoc, collection } from 'firebase/firestore';
 
 interface InventoryProps {
   toys: Toy[];
@@ -17,6 +16,7 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [editingToy, setEditingToy] = useState<Toy | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const userStr = localStorage.getItem('susu_user');
@@ -71,31 +71,55 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
     }
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) return;
-    const toyData: Toy = {
-      id: editingToy?.id || `t${Date.now()}`,
-      name: formData.name || 'Sem Nome',
-      category: formData.category || categories[0] || 'Geral',
-      price: formData.price || 0,
-      imageUrl: formData.imageUrl || '',
-      size: formData.size || '',
-      quantity: formData.quantity || 1,
-      description: formData.description,
-      status: formData.status as ToyStatus
-    };
+    if (!isAdmin || isSaving) return;
+    
+    setIsSaving(true);
+    
+    try {
+      const db = getFirestore();
+      const toyData: Omit<Toy, 'id'> = {
+        name: formData.name || 'Sem Nome',
+        category: formData.category || categories[0] || 'Geral',
+        price: formData.price || 0,
+        imageUrl: formData.imageUrl || '',
+        size: formData.size || '',
+        quantity: formData.quantity || 1,
+        description: formData.description,
+        status: formData.status as ToyStatus
+      };
 
-    setToys(prev => editingToy ? prev.map(t => t.id === editingToy.id ? toyData : t) : [...prev, toyData]);
-    setIsModalOpen(false);
+      if (editingToy) {
+        // Editando brinquedo existente
+        await setDoc(doc(db, "toys", editingToy.id), toyData);
+        setToys(prev => prev.map(t => t.id === editingToy.id ? { ...toyData, id: editingToy.id } : t));
+      } else {
+        // Adicionando novo brinquedo
+        const docRef = await addDoc(collection(db, "toys"), toyData);
+        const newToy: Toy = { ...toyData, id: docRef.id };
+        setToys(prev => [...prev, newToy]);
+      }
+      
+      setIsModalOpen(false);
+      setEditingToy(null);
+    } catch (error) {
+      console.error("Erro ao salvar brinquedo:", error);
+      alert("Erro ao salvar brinquedo. Tente novamente.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDeleteToy = async (id: string) => {
     if (!confirm("Remover este brinquedo do catálogo permanentemente?")) return;
     try {
-        await deleteDoc(doc(getFirestore(), "toys", id));
+      const db = getFirestore();
+      await deleteDoc(doc(db, "toys", id));
+      setToys(prev => prev.filter(t => t.id !== id));
     } catch (err) {
-        alert("Erro ao excluir.");
+      console.error("Erro ao excluir:", err);
+      alert("Erro ao excluir.");
     }
   };
 
@@ -258,8 +282,8 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
                 </div>
             </div>
 
-            <button type="submit" className="w-full bg-blue-600 text-white py-4 md:py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl shadow-blue-100 transition-all hover:bg-blue-700">
-                <Save size={18} className="inline mr-2" /> Salvar Alterações
+            <button type="submit" disabled={isSaving} className="w-full bg-blue-600 text-white py-4 md:py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl shadow-blue-100 transition-all hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                <Save size={18} className="inline mr-2" /> {isSaving ? 'Salvando...' : 'Salvar Alterações'}
             </button>
           </form>
         </div>
