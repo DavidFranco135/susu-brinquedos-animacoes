@@ -23,6 +23,9 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
   // Estados para visualização de álbum
   const [viewingAlbum, setViewingAlbum] = useState<Toy | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  
+  // Estado para visualização de descrição completa
+  const [viewingDescription, setViewingDescription] = useState<Toy | null>(null);
 
   const userStr = localStorage.getItem('susu_user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
@@ -379,7 +382,19 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
               <div>
                 <h3 className="text-base md:text-lg font-black text-slate-800 mb-1 md:mb-2 leading-tight">{toy.name}</h3>
                 {toy.size && <p className="text-xs md:text-sm text-slate-500 font-bold">Tamanho: {toy.size}</p>}
-                {toy.description && <p className="text-xs text-slate-400 mt-2 line-clamp-2">{toy.description}</p>}
+                {toy.description && (
+                  <div className="mt-2">
+                    <p className="text-xs text-slate-400 line-clamp-2">{toy.description}</p>
+                    {toy.description.length > 100 && (
+                      <button
+                        onClick={() => setViewingDescription(toy)}
+                        className="text-xs text-blue-600 font-bold hover:text-blue-700 mt-1 underline"
+                      >
+                        Ver mais
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex items-center justify-between pt-3 md:pt-4 border-t border-slate-100">
                 <div>
@@ -397,6 +412,56 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
           </div>
         ))}
       </div>
+
+      {/* Modal de Descrição Completa */}
+      {viewingDescription && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[120] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[40px] max-w-2xl w-full p-8 shadow-2xl relative">
+            <button 
+              onClick={() => setViewingDescription(null)}
+              className="absolute top-6 right-6 p-2 hover:bg-slate-100 rounded-full transition-all"
+            >
+              <X size={24} className="text-slate-400" />
+            </button>
+            
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-2xl font-black text-slate-800 mb-2">{viewingDescription.name}</h2>
+                <div className="flex items-center gap-3 text-sm text-slate-500 font-bold">
+                  <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-black uppercase">
+                    {viewingDescription.category}
+                  </span>
+                  {viewingDescription.size && <span>• Tamanho: {viewingDescription.size}</span>}
+                </div>
+              </div>
+              
+              <div className="border-t border-slate-100 pt-4">
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-3">Descrição Completa</h3>
+                <p className="text-slate-600 leading-relaxed whitespace-pre-line">
+                  {viewingDescription.description}
+                </p>
+              </div>
+              
+              <div className="border-t border-slate-100 pt-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Valor da Locação</p>
+                  <p className="text-3xl font-black text-blue-600">R$ {viewingDescription.price.toFixed(2)}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setViewingDescription(null);
+                    openAlbumViewer(viewingDescription);
+                  }}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm hover:bg-blue-700 transition-all flex items-center gap-2"
+                >
+                  <Maximize size={16} />
+                  Ver Fotos
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Visualização de Álbum */}
       {viewingAlbum && (
