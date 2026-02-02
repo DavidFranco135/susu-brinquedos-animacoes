@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -19,13 +18,13 @@ const Dashboard: React.FC<DashboardProps> = ({ rentals, toysCount, transactions 
 
   const stats = useMemo(() => {
     const eventsToday = rentals.filter(r => r.date === today);
-    const eventsMonth = rentals.filter(r => r.date.startsWith(currentMonth));
+    const eventsMonth = rentals.filter(r => r.date?.startsWith(currentMonth));
     
-    const incomeMonth = rentals.filter(r => r.date.startsWith(currentMonth) && r.status !== RentalStatus.CANCELLED)
-      .reduce((acc, r) => acc + (r.status === RentalStatus.COMPLETED ? r.totalValue : r.entryValue), 0) +
-      transactions.filter(t => t.date.startsWith(currentMonth) && t.type !== 'EXPENSE').reduce((acc, t) => acc + t.value, 0);
+    const incomeMonth = rentals.filter(r => r.date?.startsWith(currentMonth) && r.status !== RentalStatus.CANCELLED)
+      .reduce((acc, r) => acc + (r.status === RentalStatus.COMPLETED ? (r.totalValue || 0) : (r.entryValue || 0)), 0) +
+      transactions.filter(t => t.date?.startsWith(currentMonth) && t.type !== 'EXPENSE').reduce((acc, t) => acc + (t.value || 0), 0);
 
-    const expenseMonth = transactions.filter(t => t.date.startsWith(currentMonth) && t.type === 'EXPENSE').reduce((acc, t) => acc + t.value, 0);
+    const expenseMonth = transactions.filter(t => t.date?.startsWith(currentMonth) && t.type === 'EXPENSE').reduce((acc, t) => acc + (t.value || 0), 0);
     
     const netProfit = incomeMonth - expenseMonth;
 
@@ -41,11 +40,11 @@ const Dashboard: React.FC<DashboardProps> = ({ rentals, toysCount, transactions 
     return months.map((month, index) => {
       const monthStr = `${currentYear}-${String(index + 1).padStart(2, '0')}`;
       
-      const income = rentals.filter(r => r.date.startsWith(monthStr) && r.status !== RentalStatus.CANCELLED)
-        .reduce((acc, r) => acc + (r.status === RentalStatus.COMPLETED ? r.totalValue : r.entryValue), 0) +
-        transactions.filter(t => t.date.startsWith(monthStr) && t.type !== 'EXPENSE').reduce((acc, t) => acc + t.value, 0);
+      const income = rentals.filter(r => r.date?.startsWith(monthStr) && r.status !== RentalStatus.CANCELLED)
+        .reduce((acc, r) => acc + (r.status === RentalStatus.COMPLETED ? (r.totalValue || 0) : (r.entryValue || 0)), 0) +
+        transactions.filter(t => t.date?.startsWith(monthStr) && t.type !== 'EXPENSE').reduce((acc, t) => acc + (t.value || 0), 0);
 
-      const expense = transactions.filter(t => t.date.startsWith(monthStr) && t.type === 'EXPENSE').reduce((acc, t) => acc + t.value, 0);
+      const expense = transactions.filter(t => t.date?.startsWith(monthStr) && t.type === 'EXPENSE').reduce((acc, t) => acc + (t.value || 0), 0);
       
       return {
         name: month,
@@ -53,6 +52,13 @@ const Dashboard: React.FC<DashboardProps> = ({ rentals, toysCount, transactions 
       };
     });
   }, [rentals, transactions, currentYear]);
+
+  // Calcular o menor valor do gráfico
+  const minChartValue = useMemo(() => {
+    const values = chartData.map(d => d.valor);
+    const min = Math.min(...values);
+    return min < 0 ? min : 0;
+  }, [chartData]);
 
   const StatCard = ({ title, value, icon, color, subValue, path }: any) => (
     <div 
@@ -100,7 +106,7 @@ const Dashboard: React.FC<DashboardProps> = ({ rentals, toysCount, transactions 
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F8FAFC" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12, fontWeight: 700}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94A3B8', fontSize: 12}} domain={[minChartValue, 'auto']} />
                 <Tooltip 
                   cursor={{fill: '#F8FAFC'}} 
                   contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.05)'}}
