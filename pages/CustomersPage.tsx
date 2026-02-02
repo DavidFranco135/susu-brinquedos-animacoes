@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Users, Plus, Search, Edit, Trash2, X, Building2, Download } from 'lucide-react';
 import { Customer, User } from '../types';
-import { getFirestore, deleteDoc, doc } from "firebase/firestore";
+import { db } from '../firebase';
+import { deleteDoc, doc } from "firebase/firestore";
 
-const db = getFirestore();
 interface Props {
   customers: Customer[];
   setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
@@ -44,14 +44,12 @@ const CustomersPage: React.FC<Props> = ({ customers, setCustomers }) => {
         return;
       }
       
-      // Tornar visível temporariamente
       element.style.display = 'block';
       element.style.position = 'absolute';
       element.style.left = '-9999px';
       element.style.top = '0';
-      element.style.width = '1200px'; // Largura fixa para consistência
+      element.style.width = '1200px';
       
-      // Aguardar renderização
       await new Promise(resolve => setTimeout(resolve, 100));
       
       const canvas = await (window as any).html2canvas(element, {
@@ -104,7 +102,6 @@ const CustomersPage: React.FC<Props> = ({ customers, setCustomers }) => {
       console.error("Erro ao gerar PDF:", err);
       alert("Erro ao gerar o relatório. Tente novamente.");
     } finally {
-      // Esconder novamente
       const element = document.getElementById('print-area-customers');
       if (element) {
         element.style.display = 'none';
@@ -143,21 +140,18 @@ const CustomersPage: React.FC<Props> = ({ customers, setCustomers }) => {
     setIsModalOpen(false);
   };
 
- // ✅ VERSÃO CORRIGIDA (FUNCIONA)
-const handleDelete = async (id: string) => {
-  if (!confirm("Deseja realmente excluir este cliente?")) return;
-  
-  try {
-    // Deleta do Firebase
-    await deleteDoc(doc(db, "customers", id));
+  // ✅ FUNÇÃO DE DELETE CORRIGIDA
+  const handleDelete = async (id: string) => {
+    if (!confirm("Deseja realmente excluir este cliente?")) return;
     
-    // Remove do estado local (já será atualizado pelo onSnapshot, mas fazemos para resposta imediata)
-    setCustomers(prev => prev.filter(c => c.id !== id));
-  } catch (error) {
-    console.error("Erro ao excluir cliente:", error);
-    alert("Erro ao excluir o cliente. Tente novamente.");
-  }
-};
+    try {
+      await deleteDoc(doc(db, "customers", id));
+      setCustomers(prev => prev.filter(c => c.id !== id));
+    } catch (error) {
+      console.error("Erro ao excluir cliente:", error);
+      alert("Erro ao excluir o cliente. Tente novamente.");
+    }
+  };
 
   return (
     <div className="space-y-6">
