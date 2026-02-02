@@ -444,7 +444,8 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
               
               <div className="border-t border-slate-100 pt-4 flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Valor da Locação</p>
+                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Valor da Locação 
+                  a partir de:</p>
                   <p className="text-3xl font-black text-blue-600">R$ {viewingDescription.price.toFixed(2)}</p>
                 </div>
                 <button
