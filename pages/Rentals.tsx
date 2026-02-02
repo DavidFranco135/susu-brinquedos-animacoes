@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, X, ChevronLeft, ChevronRight, Edit3, Calendar as CalendarIcon, List, CalendarDays, BarChart3, Clock, CheckCircle2, MapPin, UserPlus, FileSpreadsheet, Download, Phone, Share2, MessageCircle, Trash2, ClipboardList, Filter, DollarSign, Loader2 } from 'lucide-react';
 import { Rental, RentalStatus, Customer, Toy, User, UserRole, PaymentMethod } from '../types';
-import { getFirestore, doc, deleteDoc } from 'firebase/firestore'; // Importações adicionadas
+import { getFirestore, doc, deleteDoc } from 'firebase/firestore'; // Adicionado para deletar
 
 interface RentalsProps {
   rentals: Rental[];
@@ -19,24 +19,23 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
   const [viewTab, setViewTab] = useState<'Mês' | 'Ano' | 'Lista'>('Mês');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedCategory, setSelectedCategory] = useState<string>('TODAS');
-  const [isDeleting, setIsDeleting] = useState<string | null>(null); // Estado para o loading da lixeira
+  const [isDeleting, setIsDeleting] = useState<string | null>(null); // Estado para feedback de exclusão
 
-  const db = getFirestore(); // Firestore inicializado
+  const db = getFirestore(); // Inicializa o banco
   const userStr = localStorage.getItem('susu_user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
 
-  // FUNÇÃO DE EXCLUIR CONSERTADA
+  // FUNÇÃO PARA APAGAR RESERVA
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Tem certeza que deseja excluir esta reserva?")) return;
+    if (!window.confirm("Deseja excluir esta reserva permanentemente?")) return;
     
     setIsDeleting(id);
     try {
       await deleteDoc(doc(db, "rentals", id));
-      // Filtra localmente para a interface atualizar na hora
       setRentals(prev => prev.filter(r => r.id !== id));
     } catch (error) {
       console.error("Erro ao deletar:", error);
-      alert("Não foi possível excluir a reserva.");
+      alert("Erro ao excluir. Tente novamente.");
     } finally {
       setIsDeleting(null);
     }
@@ -47,7 +46,6 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
     return ['TODAS', ...uniqueCategories];
   }, [toys]);
 
-  // Filtros originais mantidos
   const filteredRentals = useMemo(() => {
     return rentals.filter(rental => {
       const rentalDate = new Date(rental.date);
@@ -64,17 +62,42 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
     });
   }, [rentals, currentDate, viewTab, selectedCategory, toys]);
 
-  // ... (RESTANTE DAS FUNÇÕES DE EDIÇÃO E FORMULÁRIO MANTIDAS IGUAIS)
+  const [formData, setFormData] = useState<Partial<Rental>>({
+    date: new Date().toISOString().split('T')[0],
+    startTime: '14:00',
+    endTime: '18:00',
+    toyIds: [],
+    totalValue: 0,
+    entryValue: 0,
+    paymentMethod: 'PIX' as PaymentMethod,
+    status: RentalStatus.CONFIRMED
+  });
 
-  const handleEdit = (rental: Rental) => {
-    setEditingBudget(rental); // mantendo o nome da sua função original
-    setIsModalOpen(true);
-  };
+  useEffect(() => {
+    if (editingRental) {
+      setFormData(editingRental);
+    } else {
+      setFormData({
+        date: new Date().toISOString().split('T')[0],
+        startTime: '14:00',
+        endTime: '18:00',
+        toyIds: [],
+        totalValue: 0,
+        entryValue: 0,
+        paymentMethod: 'PIX' as PaymentMethod,
+        status: RentalStatus.CONFIRMED
+      });
+    }
+  }, [editingRental, isModalOpen]);
 
-  // RENDERIZAÇÃO
+  useEffect(() => {
+    const selectedToys = toys.filter(t => formData.toyIds?.includes(t.id));
+    const total = selectedToys.reduce((acc, t) => acc + t.price, 0);
+    setFormData(prev => ({ ...prev, totalValue: total }));
+  }, [formData.toyIds, toys]);
+
   return (
     <div className="space-y-10 pb-20">
-      {/* Cabeçalho mantido exatamente igual */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 no-print">
           <div>
               <h1 className="text-4xl font-black text-slate-800 tracking-tight uppercase">Reservas</h1>
@@ -90,13 +113,12 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
           </button>
       </div>
 
-      {/* Grid de Cards - Onde o botão de excluir foi corrigido */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 no-print">
           {filteredRentals.map((rental) => (
               <div key={rental.id} className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm relative group">
                   <div className="absolute top-6 right-6 flex gap-2 no-print">
                       <button 
-                          onClick={() => handleEdit(rental)}
+                          onClick={() => { setEditingRental(rental); setIsModalOpen(true); }}
                           className="p-3 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all"
                       >
                           <Edit3 size={18} />
@@ -114,7 +136,6 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
                     <CalendarIcon size={14} /> {new Date(rental.date).toLocaleDateString('pt-BR')}
                   </p>
                   
-                  {/* ... Resto do seu card igualzinho ... */}
                   <div className="space-y-4">
                     <div className="flex flex-wrap gap-2">
                       {rental.toyIds.map(id => {
@@ -138,13 +159,8 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
               </div>
           ))}
       </div>
-
-      {/* O Modal de Edição/Criação abaixo deve ser mantido exatamente como está no seu arquivo original */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-end no-print">
-          {/* ... Todo o seu <form> e campos do modal original ... */}
-        </div>
-      )}
+      
+      {/* Restante do seu código (Modais, etc) deve vir abaixo mantendo sua estrutura original */}
     </div>
   );
 };
