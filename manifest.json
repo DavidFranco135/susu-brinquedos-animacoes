@@ -3,13 +3,13 @@
   "name": "Susu Animações - Gestão de Eventos",
   "icons": [
     {
-      "src": "logo.png",
+      "src": "/logo.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
   "display": "standalone",
   "theme_color": "#00D1FF",
   "background_color": "#F8FAFC"
