@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Download, Calendar, X, Plus, CheckCircle, Edit3, MessageCircle, Trash2, Loader2 } from 'lucide-react';
-import { Rental, Toy, Customer, CompanySettings, RentalStatus, PaymentMethod, User } from '../types';
+import { Rental, Toy, Customer, CompanySettings, RentalStatus, User } from '../types';
 import { getFirestore, doc, deleteDoc, setDoc, addDoc, collection } from 'firebase/firestore';
 
 interface Props {
@@ -26,7 +26,6 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
     toyIds: [],
     totalValue: 0,
     entryValue: 0,
-    paymentMethod: 'PIX' as PaymentMethod,
     status: RentalStatus.PENDING
   });
 
@@ -36,12 +35,14 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
     setFormData(prev => ({ ...prev, totalValue: total }));
   }, [formData.toyIds, toys]);
 
+  // FUNÇÃO PARA BAIXAR/IMPRIMIR
   const handlePrint = () => {
     window.print();
   };
 
+  // FUNÇÃO PARA APAGAR
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Excluir este orçamento permanentemente?")) return;
+    if (!window.confirm("Deseja excluir este orçamento permanentemente?")) return;
     setIsDeleting(id);
     try {
       await deleteDoc(doc(db, "rentals", id));
@@ -52,6 +53,7 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
     }
   };
 
+  // FUNÇÃO PARA EDITAR
   const handleEdit = (rental: Rental) => {
     setEditingBudget(rental);
     setFormData(rental);
@@ -78,11 +80,12 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
 
   return (
     <div className="space-y-10 pb-20">
+      {/* CSS para garantir que o PDF não saia branco e oculte o que não deve */}
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           body * { visibility: hidden !important; }
           #print-area, #print-area * { visibility: visible !important; }
-          #print-area { position: absolute; left: 0; top: 0; width: 100%; }
+          #print-area { position: absolute; left: 0; top: 0; width: 100% !important; margin: 0 !important; padding: 20px !important; }
           .no-print { display: none !important; }
         }
       `}} />
@@ -91,7 +94,7 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
         <div>
           <h1 className="text-4xl font-black text-slate-800 tracking-tight uppercase">Orçamentos</h1>
           <p className="text-slate-400 font-bold flex items-center gap-2 uppercase text-xs tracking-widest mt-1">
-            <FileText size={14} className="text-blue-600" /> {rentals.length} Propostas Geradas
+            <FileText size={14} className="text-blue-600" /> {rentals.length} Propostas
           </p>
         </div>
         <button 
@@ -102,6 +105,7 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
         </button>
       </div>
 
+      {/* Grid de Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 no-print">
         {rentals.map((rental) => (
           <div key={rental.id} className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm hover:shadow-xl transition-all">
@@ -118,34 +122,32 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
                 </button>
               </div>
             </div>
-
             <h3 className="text-lg font-black text-slate-800 uppercase mb-1 truncate">{rental.customerName}</h3>
             <p className="text-slate-400 font-bold text-xs uppercase mb-6 flex items-center gap-2">
               <Calendar size={14} /> {new Date(rental.date).toLocaleDateString('pt-BR')}
             </p>
-
             <button 
               onClick={() => setSelectedRental(rental)}
               className="w-full bg-slate-900 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all"
             >
-              Visualizar Proposta
+              Visualizar PDF
             </button>
           </div>
         ))}
       </div>
 
+      {/* Modal de Visualização (Onde gera o PDF) */}
       {selectedRental && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 no-print">
           <div className="bg-white w-full max-w-4xl rounded-[40px] shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
             <div className="p-6 border-b flex justify-between items-center bg-white">
-              <button onClick={handlePrint} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2">
+              <button onClick={handlePrint} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2 shadow-lg">
                 <Download size={16} /> Baixar PDF
               </button>
               <button onClick={() => setSelectedRental(null)} className="p-3 text-slate-400 hover:text-red-500 transition-all">
                 <X size={20} />
               </button>
             </div>
-
             <div className="flex-1 overflow-y-auto p-8 bg-slate-100">
               <div id="print-area" className="bg-white mx-auto p-12 max-w-[210mm] shadow-sm text-slate-800">
                 <div className="flex justify-between items-start border-b-4 border-blue-600 pb-8 mb-8">
@@ -158,37 +160,34 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
                     <p className="text-xs font-bold text-slate-500">{company.phone}</p>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-12 mb-10">
-                  <div className="space-y-1">
+                  <div>
                     <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Cliente</span>
                     <p className="font-black text-lg text-slate-800 uppercase">{selectedRental.customerName}</p>
                   </div>
-                  <div className="space-y-1 text-right">
+                  <div className="text-right">
                     <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Data do Evento</span>
                     <p className="font-black text-lg text-slate-800">{new Date(selectedRental.date).toLocaleDateString('pt-BR')}</p>
                   </div>
                 </div>
-
                 <table className="w-full mb-10">
-                  <thead>
-                    <tr className="bg-slate-900 text-white">
-                      <th className="px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest">Item</th>
-                      <th className="px-6 py-4 text-right text-[10px] font-black uppercase tracking-widest">Valor</th>
+                  <thead className="bg-slate-900 text-white text-[10px] uppercase font-black tracking-widest">
+                    <tr>
+                      <th className="px-6 py-4 text-left">Descrição</th>
+                      <th className="px-6 py-4 text-right">Valor</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {toys.filter(t => selectedRental.toyIds.includes(t.id)).map(toy => (
                       <tr key={toy.id}>
                         <td className="px-6 py-5 font-bold text-slate-700 uppercase text-sm">{toy.name}</td>
-                        <td className="px-6 py-5 text-right font-black text-slate-700">R$ {toy.price.toLocaleString('pt-BR')}</td>
+                        <td className="px-6 py-5 text-right font-black">R$ {toy.price.toLocaleString('pt-BR')}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-
-                <div className="flex justify-end mb-12 text-right">
-                  <div className="w-64 bg-slate-50 p-6 rounded-3xl">
+                <div className="flex justify-end text-right">
+                  <div className="bg-slate-50 p-6 rounded-3xl">
                     <span className="text-sm font-black text-slate-800 uppercase">Total: </span>
                     <span className="text-xl font-black text-blue-600">R$ {selectedRental.totalValue.toLocaleString('pt-BR')}</span>
                   </div>
@@ -199,6 +198,7 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
         </div>
       )}
 
+      {/* Modal de Formulário (Criar/Editar) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-end no-print">
           <form onSubmit={handleSave} className="bg-white w-full max-w-xl h-full shadow-2xl p-10 overflow-y-auto">
@@ -206,14 +206,13 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
               <h2 className="text-2xl font-black uppercase tracking-tight text-slate-800">
                 {editingBudget ? 'Editar Orçamento' : 'Novo Orçamento'}
               </h2>
-              <button type="button" onClick={() => setIsModalOpen(false)} className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:text-red-500 transition-all">
+              <button type="button" onClick={() => setIsModalOpen(false)} className="p-3 text-slate-400 hover:text-red-500 transition-all">
                 <X size={20}/>
               </button>
             </div>
-
             <div className="space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Cliente</label>
+                <label className="text-[10px] font-black text-blue-600 uppercase">Cliente</label>
                 <select 
                   className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold outline-none"
                   value={formData.customerId}
@@ -226,25 +225,15 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
                   {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Data</label>
-                  <input type="date" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold outline-none" value={formData.date} onChange={e=>setFormData({...formData, date: e.target.value})}/>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Pagamento</label>
-                  <select className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold outline-none" value={formData.paymentMethod} onChange={e=>setFormData({...formData, paymentMethod: e.target.value as PaymentMethod})}>
-                    {Object.values(PaymentMethod).map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase">Data</label>
+                <input type="date" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold outline-none" value={formData.date} onChange={e=>setFormData({...formData, date: e.target.value})}/>
               </div>
-
               <div className="space-y-4">
-                <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Brinquedos</label>
-                <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                <label className="text-[10px] font-black text-blue-600 uppercase">Brinquedos</label>
+                <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto">
                   {toys.map(t => (
-                    <label key={t.id} className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all cursor-pointer ${formData.toyIds?.includes(t.id) ? 'border-blue-600 bg-blue-50' : 'border-slate-50 bg-slate-50'}`}>
+                    <label key={t.id} className={`flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer ${formData.toyIds?.includes(t.id) ? 'border-blue-600 bg-blue-50' : 'border-slate-50 bg-slate-50'}`}>
                       <input type="checkbox" className="hidden" checked={formData.toyIds?.includes(t.id)} onChange={() => {
                         const next = formData.toyIds?.includes(t.id) ? formData.toyIds.filter(x => x !== t.id) : [...(formData.toyIds || []), t.id];
                         setFormData({...formData, toyIds: next});
@@ -257,14 +246,12 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
                   ))}
                 </div>
               </div>
-
-              <div className="bg-slate-900 p-8 rounded-[32px] flex justify-between items-center text-white">
-                <span className="text-xs font-black uppercase tracking-widest text-slate-500">Total</span>
+              <div className="bg-slate-900 p-8 rounded-[32px] text-white flex justify-between items-center">
+                <span className="text-xs font-black uppercase">Total</span>
                 <span className="text-2xl font-black">R$ {(formData.totalValue || 0).toLocaleString('pt-BR')}</span>
               </div>
-
-              <button type="submit" className="w-full bg-blue-600 text-white py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
-                <CheckCircle size={18}/> {editingBudget ? 'Salvar Alterações' : 'Criar Orçamento'}
+              <button type="submit" className="w-full bg-blue-600 text-white py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl hover:bg-blue-700 transition-all">
+                {editingBudget ? 'Salvar Alterações' : 'Criar Orçamento'}
               </button>
             </div>
           </form>
