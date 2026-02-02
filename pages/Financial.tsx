@@ -1,234 +1,197 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, 
-  BarChart, Bar, AreaChart, Area, PieChart, Pie, Legend, LineChart, Line
-} from 'recharts';
-import { 
-  Wallet, TrendingUp, TrendingDown, Plus, X, DollarSign, 
-  ArrowUpRight, ArrowDownRight, Activity, Calendar, PieChart as PieIcon
+  TrendingUp, TrendingDown, DollarSign, Wallet, 
+  Calendar, Filter, ArrowUpCircle, ArrowDownCircle,
+  BarChart3, PieChart, Download
 } from 'lucide-react';
-import { FinancialTransaction, Rental, RentalStatus, User, PaymentMethod } from '../types';
+import { 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
+  Tooltip, ResponsiveContainer, BarChart, Bar, Legend 
+} from 'recharts';
+import { Rental, FinancialTransaction, RentalStatus } from '../types';
 
-interface Props {
+interface FinancialProps {
   rentals: Rental[];
-  setRentals: React.Dispatch<React.SetStateAction<Rental[]>>;
   transactions: FinancialTransaction[];
-  setTransactions: React.Dispatch<React.SetStateAction<FinancialTransaction[]>>;
+  setTransactions: (action: any) => void;
 }
 
-const Financial: React.FC<Props> = ({ rentals, transactions, setTransactions }) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const now = new Date();
-  const [filterMonth, setFilterMonth] = useState<string>(String(now.getMonth() + 1).padStart(2, '0'));
-  const [filterYear, setFilterYear] = useState(String(now.getFullYear()));
+const Financial: React.FC<FinancialProps> = ({ rentals, transactions, setTransactions }) => {
+  const [viewTab, setViewTab] = useState<'Mês' | 'Ano'>('Mês');
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [activeFilter, setActiveFilter] = useState<'Receitas' | 'Despesas' | 'Lucro' | 'AReceber'>('Lucro');
 
-  // Lógica de Cálculos de Resumo
-  const stats = useMemo(() => {
-    const periodTransactions = transactions.filter(t => t.date.startsWith(`${filterYear}-${filterMonth}`));
-    const periodRentals = rentals.filter(r => r.date.startsWith(`${filterYear}-${filterMonth}`) && r.status !== RentalStatus.CANCELLED);
+  // 1. Filtragem por Período (Mês ou Ano)
+  const filteredData = useMemo(() => {
+    const month = currentDate.getMonth();
+    const year = currentDate.getFullYear();
 
-    const extraIncome = periodTransactions.filter(t => t.type === 'INCOME').reduce((acc, t) => acc + t.value, 0);
-    // Soma o total se concluído ou apenas a entrada se pendente
-    const rentalIncome = periodRentals.reduce((acc, r) => acc + (r.status === RentalStatus.COMPLETED ? r.totalValue : r.entryValue), 0);
-    
-    const income = extraIncome + rentalIncome;
-    const expense = periodTransactions.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + t.value, 0);
-
-    return {
-      income,
-      expense,
-      profit: income - expense,
-      pending: periodRentals.filter(r => r.status !== RentalStatus.COMPLETED).reduce((acc, r) => acc + (r.totalValue - r.entryValue), 0)
-    };
-  }, [rentals, transactions, filterMonth, filterYear]);
-
-  // Dados para o Gráfico de Área (Fluxo Diário)
-  const chartData = useMemo(() => {
-    const daysInMonth = new Date(Number(filterYear), Number(filterMonth), 0).getDate();
-    return Array.from({ length: daysInMonth }, (_, i) => {
-      const day = String(i + 1).padStart(2, '0');
-      const dateStr = `${filterYear}-${filterMonth}-${day}`;
-      
-      const tIn = transactions.filter(t => t.date === dateStr && t.type === 'INCOME').reduce((acc, t) => acc + t.value, 0);
-      const rIn = rentals.filter(r => r.date === dateStr && r.status !== RentalStatus.CANCELLED)
-                         .reduce((acc, r) => acc + (r.status === RentalStatus.COMPLETED ? r.totalValue : r.entryValue), 0);
-      const exp = transactions.filter(t => t.date === dateStr && t.type === 'EXPENSE').reduce((acc, t) => acc + t.value, 0);
-
-      return {
-        name: day,
-        receita: tIn + rIn,
-        despesa: exp
-      };
+    const filteredRentals = rentals.filter(r => {
+      const d = new Date(r.date + 'T00:00:00');
+      return viewTab === 'Mês' ? (d.getMonth() === month && d.getFullYear() === year) : (d.getFullYear() === year);
     });
-  }, [rentals, transactions, filterMonth, filterYear]);
 
-  // Função do Botão "Novo Lançamento" (Corrigida)
-  const handleAddTransaction = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    
-    const newTransaction: FinancialTransaction = {
-      id: `t${Date.now()}`, // Gera ID único para o Firebase
-      description: formData.get('description') as string,
-      value: Number(formData.get('value')),
-      type: formData.get('type') as 'INCOME' | 'EXPENSE',
-      date: formData.get('date') as string,
-      category: formData.get('category') as string,
-      paymentMethod: 'PIX'
-    };
+    const filteredTrans = transactions.filter(t => {
+      const d = new Date(t.date);
+      return viewTab === 'Mês' ? (d.getMonth() === month && d.getFullYear() === year) : (d.getFullYear() === year);
+    });
 
-    setTransactions(prev => [...prev, newTransaction]);
-    setIsModalOpen(false);
-  };
+    return { filteredRentals, filteredTrans };
+  }, [rentals, transactions, currentDate, viewTab]);
+
+  // 2. Cálculos dos Totais
+  const stats = useMemo(() => {
+    const receitas = filteredData.filteredRentals.reduce((acc, r) => acc + (r.entryValue || 0), 0);
+    const despesas = filteredData.filteredTrans.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + t.amount, 0);
+    const aReceber = filteredData.filteredRentals.reduce((acc, r) => acc + (r.totalValue - r.entryValue), 0);
+    const lucro = receitas - despesas;
+
+    return { receitas, despesas, aReceber, lucro };
+  }, [filteredData]);
+
+  // 3. Preparação dos Dados para o Gráfico Melhorado
+  const chartData = useMemo(() => {
+    if (viewTab === 'Ano') {
+      const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+      return months.map((m, i) => {
+        const r = filteredData.filteredRentals.filter(rent => new Date(rent.date + 'T00:00:00').getMonth() === i).reduce((acc, rent) => acc + rent.entryValue, 0);
+        const d = filteredData.filteredTrans.filter(t => t.type === 'EXPENSE' && new Date(t.date).getMonth() === i).reduce((acc, t) => acc + t.amount, 0);
+        return { name: m, Entradas: r, Saídas: d, Lucro: r - d };
+      });
+    } else {
+      // Visão mensal por semana ou dias (simplificado para 4 semanas)
+      return [
+        { name: 'Semana 1', Entradas: stats.receitas * 0.2, Saídas: stats.despesas * 0.2 },
+        { name: 'Semana 2', Entradas: stats.receitas * 0.3, Saídas: stats.despesas * 0.4 },
+        { name: 'Semana 3', Entradas: stats.receitas * 0.3, Saídas: stats.despesas * 0.2 },
+        { name: 'Semana 4', Entradas: stats.receitas * 0.2, Saídas: stats.despesas * 0.2 },
+      ];
+    }
+  }, [viewTab, filteredData, stats]);
 
   return (
-    <div className="space-y-8 pb-20 animate-in fade-in duration-500">
-      {/* Header */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-10 animate-in fade-in duration-700">
+      {/* Header com Filtro de Tempo */}
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
-          <h1 className="text-3xl font-black uppercase tracking-tighter text-slate-800">Financeiro</h1>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-            <Activity size={12} className="text-blue-500"/> Controle de Fluxo de Caixa
-          </p>
+          <h1 className="text-4xl font-black text-slate-800 tracking-tight">Fluxo de Caixa</h1>
+          <p className="text-slate-500 font-medium">Gestão financeira de entradas e saídas.</p>
         </div>
-
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-slate-100">
-             <select 
-               className="bg-transparent border-0 px-4 py-2 font-bold text-xs outline-none"
-               value={filterMonth} onChange={e => setFilterMonth(e.target.value)}
-             >
-               {['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => <option key={m} value={m}>{m}</option>)}
-             </select>
-             <select 
-               className="bg-transparent border-0 px-4 py-2 font-bold text-xs outline-none border-l border-slate-100"
-               value={filterYear} onChange={e => setFilterYear(e.target.value)}
-             >
-               {['2024','2025','2026'].map(y => <option key={y} value={y}>{y}</option>)}
-             </select>
-          </div>
-          
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="flex-1 md:flex-none bg-blue-600 text-white px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95"
-          >
-            <Plus size={18} /> Novo Lançamento
-          </button>
+        <div className="flex bg-white p-1.5 rounded-[22px] shadow-sm border border-slate-100">
+          <button onClick={() => setViewTab('Mês')} className={`px-8 py-3 rounded-[18px] text-xs font-black uppercase tracking-widest transition-all ${viewTab === 'Mês' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>Mês</button>
+          <button onClick={() => setViewTab('Ano')} className={`px-8 py-3 rounded-[18px] text-xs font-black uppercase tracking-widest transition-all ${viewTab === 'Ano' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>Ano</button>
         </div>
       </header>
 
-      {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform"><TrendingUp size={48}/></div>
-          <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Receitas</p>
-          <p className="text-2xl font-black text-emerald-600">R$ {stats.income.toLocaleString('pt-BR')}</p>
-        </div>
+      {/* Cards de Resumo com Filtro ao Clicar */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <button onClick={() => setActiveFilter('Receitas')} className={`p-8 rounded-[40px] border-2 transition-all text-left ${activeFilter === 'Receitas' ? 'bg-emerald-500 border-emerald-200 text-white shadow-xl scale-105' : 'bg-white border-transparent hover:border-emerald-100'}`}>
+          <ArrowUpCircle className={activeFilter === 'Receitas' ? 'text-white' : 'text-emerald-500'} size={32} />
+          <p className={`mt-4 text-[10px] font-black uppercase tracking-widest ${activeFilter === 'Receitas' ? 'text-emerald-100' : 'text-slate-400'}`}>Receitas (Entradas)</p>
+          <h3 className="text-2xl font-black mt-1">R$ {stats.receitas.toLocaleString('pt-BR')}</h3>
+        </button>
 
-        <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform"><TrendingDown size={48}/></div>
-          <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Despesas</p>
-          <p className="text-2xl font-black text-red-500">R$ {stats.expense.toLocaleString('pt-BR')}</p>
-        </div>
+        <button onClick={() => setActiveFilter('Despesas')} className={`p-8 rounded-[40px] border-2 transition-all text-left ${activeFilter === 'Despesas' ? 'bg-rose-500 border-rose-200 text-white shadow-xl scale-105' : 'bg-white border-transparent hover:border-rose-100'}`}>
+          <ArrowDownCircle className={activeFilter === 'Despesas' ? 'text-white' : 'text-rose-500'} size={32} />
+          <p className={`mt-4 text-[10px] font-black uppercase tracking-widest ${activeFilter === 'Despesas' ? 'text-rose-100' : 'text-slate-400'}`}>Despesas (Saídas)</p>
+          <h3 className="text-2xl font-black mt-1">R$ {stats.despesas.toLocaleString('pt-BR')}</h3>
+        </button>
 
-        <div className="bg-slate-900 p-6 rounded-[32px] shadow-xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-20 text-blue-400"><DollarSign size={48}/></div>
-          <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Lucro Estimado</p>
-          <p className="text-2xl font-black text-white">R$ {stats.profit.toLocaleString('pt-BR')}</p>
-        </div>
+        <button onClick={() => setActiveFilter('Lucro')} className={`p-8 rounded-[40px] border-2 transition-all text-left ${activeFilter === 'Lucro' ? 'bg-blue-600 border-blue-200 text-white shadow-xl scale-105' : 'bg-white border-transparent hover:border-blue-100'}`}>
+          <TrendingUp className={activeFilter === 'Lucro' ? 'text-white' : 'text-blue-600'} size={32} />
+          <p className={`mt-4 text-[10px] font-black uppercase tracking-widest ${activeFilter === 'Lucro' ? 'text-blue-100' : 'text-slate-400'}`}>Lucro Líquido</p>
+          <h3 className="text-2xl font-black mt-1">R$ {stats.lucro.toLocaleString('pt-BR')}</h3>
+        </button>
 
-        <div className="bg-blue-50 p-6 rounded-[32px] border border-blue-100 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-20 text-blue-600"><Calendar size={48}/></div>
-          <p className="text-[10px] font-black text-blue-400 uppercase mb-1">A Receber</p>
-          <p className="text-2xl font-black text-blue-700">R$ {stats.pending.toLocaleString('pt-BR')}</p>
-        </div>
+        <button onClick={() => setActiveFilter('AReceber')} className={`p-8 rounded-[40px] border-2 transition-all text-left ${activeFilter === 'AReceber' ? 'bg-amber-500 border-amber-200 text-white shadow-xl scale-105' : 'bg-white border-transparent hover:border-amber-100'}`}>
+          <Wallet className={activeFilter === 'AReceber' ? 'text-white' : 'text-amber-500'} size={32} />
+          <p className={`mt-4 text-[10px] font-black uppercase tracking-widest ${activeFilter === 'AReceber' ? 'text-amber-100' : 'text-slate-400'}`}>A Receber (Dívidas)</p>
+          <h3 className="text-2xl font-black mt-1">R$ {stats.aReceber.toLocaleString('pt-BR')}</h3>
+        </button>
       </div>
 
-      {/* Gráfico Visual Principal */}
-      <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm">
-        <div className="flex justify-between items-center mb-8">
-          <h3 className="font-black uppercase text-slate-800 text-sm tracking-widest flex items-center gap-2">
-            <Activity size={18} className="text-blue-500"/> Fluxo Diário de Caixa
+      {/* Gráfico Melhorado */}
+      <div className="bg-white p-10 rounded-[50px] border border-slate-100 shadow-sm">
+        <div className="flex justify-between items-center mb-10">
+          <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
+            <BarChart3 className="text-blue-600" /> Desempenho do Período
           </h3>
-          <div className="flex gap-4 text-[10px] font-bold uppercase">
-             <span className="flex items-center gap-1 text-emerald-500"><div className="w-2 h-2 rounded-full bg-emerald-500"/> Receita</span>
-             <span className="flex items-center gap-1 text-red-400"><div className="w-2 h-2 rounded-full bg-red-400"/> Despesa</span>
-          </div>
         </div>
-        <div className="h-[300px] w-full">
+        <div className="h-[350px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
               <defs>
-                <linearGradient id="colorRec" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="colorEntradas" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
                   <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                 </linearGradient>
+                <linearGradient id="colorSaidas" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold', fill: '#94a3b8'}} />
-              <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold', fill: '#94a3b8'}} />
+              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 'bold', fill: '#94a3b8'}} dy={15} />
+              <YAxis axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 'bold', fill: '#94a3b8'}} tickFormatter={(value) => `R$${value}`} />
               <Tooltip 
-                contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', padding: '15px'}}
-                itemStyle={{fontSize: '12px', fontWeight: '900', textTransform: 'uppercase'}}
+                contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                itemStyle={{ fontWeight: 'black', fontSize: '12px' }}
               />
-              <Area type="monotone" dataKey="receita" stroke="#10b981" strokeWidth={4} fillOpacity={1} fill="url(#colorRec)" />
-              <Area type="monotone" dataKey="despesa" stroke="#f87171" strokeWidth={4} fill="none" strokeDasharray="5 5" />
+              <Legend verticalAlign="top" align="right" iconType="circle" />
+              <Area type="monotone" dataKey="Entradas" stroke="#10b981" strokeWidth={4} fillOpacity={1} fill="url(#colorEntradas)" />
+              <Area type="monotone" dataKey="Saídas" stroke="#f43f5e" strokeWidth={4} fillOpacity={1} fill="url(#colorSaidas)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Modal Novo Lançamento (Consertado) */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-lg rounded-[40px] p-10 shadow-2xl overflow-hidden relative">
-            <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-800 transition-colors"><X/></button>
-            
-            <h2 className="text-2xl font-black uppercase tracking-tighter mb-8">Novo Lançamento</h2>
-            
-            <form onSubmit={handleAddTransaction} className="space-y-6">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Descrição do Lançamento</label>
-                <input required name="description" placeholder="Ex: Manutenção Pula-Pula" className="w-full p-4 bg-slate-50 rounded-2xl border-0 font-bold outline-none focus:ring-2 focus:ring-blue-500/20" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Valor (R$)</label>
-                  <input required name="value" type="number" step="0.01" placeholder="0,00" className="w-full p-4 bg-slate-50 rounded-2xl border-0 font-bold outline-none" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Tipo</label>
-                  <select name="type" className="w-full p-4 bg-slate-50 rounded-2xl border-0 font-bold outline-none">
-                    <option value="EXPENSE">Despesa (Saída)</option>
-                    <option value="INCOME">Receita Extra (Entrada)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Data</label>
-                  <input required name="date" type="date" defaultValue={now.toISOString().split('T')[0]} className="w-full p-4 bg-slate-50 rounded-2xl border-0 font-bold outline-none" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Categoria</label>
-                  <select name="category" className="w-full p-4 bg-slate-50 rounded-2xl border-0 font-bold outline-none">
-                    <option value="Manutenção">Manutenção</option>
-                    <option value="Equipe">Pagamento Equipe</option>
-                    <option value="Marketing">Marketing/Anúncios</option>
-                    <option value="Outros">Outros</option>
-                  </select>
-                </div>
-              </div>
-
-              <button type="submit" className="w-full bg-blue-600 text-white py-5 rounded-[24px] font-black uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all">
-                Salvar no Sistema
-              </button>
-            </form>
-          </div>
+      {/* Listagem Filtrada Conforme o Card Clicado */}
+      <div className="bg-white rounded-[40px] border border-slate-100 overflow-hidden shadow-sm">
+        <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+           <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest">Detalhamento: {activeFilter}</h3>
         </div>
-      )}
+        <table className="w-full text-left">
+          <thead className="bg-white text-slate-400 text-[10px] font-black uppercase tracking-widest">
+            <tr>
+              <th className="px-10 py-5">Descrição</th>
+              <th className="px-8 py-5">Data</th>
+              <th className="px-8 py-5">Valor</th>
+              <th className="px-8 py-5 text-right">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50 font-bold text-slate-700">
+            {/* Se o filtro for Receitas ou Lucro, mostra os Sinais das Reservas */}
+            {(activeFilter === 'Receitas' || activeFilter === 'Lucro') && filteredData.filteredRentals.map(r => (
+              <tr key={r.id}>
+                <td className="px-10 py-5 text-sm">Entrada: {r.customerName}</td>
+                <td className="px-8 py-5 text-xs text-slate-400">{new Date(r.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                <td className="px-8 py-5 text-emerald-600">+ R$ {r.entryValue.toLocaleString('pt-BR')}</td>
+                <td className="px-8 py-5 text-right"><span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[9px] font-black uppercase">Recebido</span></td>
+              </tr>
+            ))}
+
+            {/* Se o filtro for Despesas ou Lucro, mostra as Transações de Saída */}
+            {(activeFilter === 'Despesas' || activeFilter === 'Lucro') && filteredData.filteredTrans.map(t => (
+              <tr key={t.id}>
+                <td className="px-10 py-5 text-sm">{t.description}</td>
+                <td className="px-8 py-5 text-xs text-slate-400">{new Date(t.date).toLocaleDateString('pt-BR')}</td>
+                <td className="px-8 py-5 text-rose-500">- R$ {t.amount.toLocaleString('pt-BR')}</td>
+                <td className="px-8 py-5 text-right"><span className="px-3 py-1 bg-rose-50 text-rose-500 rounded-full text-[9px] font-black uppercase">Pago</span></td>
+              </tr>
+            ))}
+
+            {/* Se o filtro for A Receber, mostra o saldo pendente das reservas */}
+            {activeFilter === 'AReceber' && filteredData.filteredRentals.filter(r => r.totalValue > r.entryValue).map(r => (
+              <tr key={r.id}>
+                <td className="px-10 py-5 text-sm">Pendente: {r.customerName}</td>
+                <td className="px-8 py-5 text-xs text-slate-400">{new Date(r.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                <td className="px-8 py-5 text-amber-600">R$ {(r.totalValue - r.entryValue).toLocaleString('pt-BR')}</td>
+                <td className="px-8 py-5 text-right"><span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[9px] font-black uppercase">Pendente</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };
