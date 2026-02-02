@@ -18,12 +18,7 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
   const [editingToy, setEditingToy] = useState<Toy | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>('');
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Sua chave API do ImgBB (gratuita) - Pegue em: https://api.imgbb.com/
-  const IMGBB_API_KEY = '1e79854ab10d29dcbf23c6a7f267dd54'; // ⚠️ SUBSTITUA PELA SUA CHAVE
 
   const userStr = localStorage.getItem('susu_user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
@@ -50,8 +45,6 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
     if (toy) {
       setEditingToy(toy);
       setFormData(toy);
-      setPreviewUrl(toy.imageUrl);
-      setSelectedImage(null);
     } else {
       setEditingToy(null);
       const defaultImage = 'https://images.unsplash.com/photo-1533749047139-189de3cf06d3?auto=format&fit=crop&q=80&w=400';
@@ -65,66 +58,90 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
         description: '',
         status: ToyStatus.AVAILABLE
       });
-      setPreviewUrl(defaultImage);
-      setSelectedImage(null);
     }
     setUploadProgress('');
     setIsModalOpen(true);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Validar tamanho (máximo 32MB - limite do ImgBB gratuito)
-      if (file.size > 32 * 1024 * 1024) {
-        alert('A imagem deve ter no máximo 32MB');
-        return;
-      }
-
-      // Validar tipo
-      if (!file.type.startsWith('image/')) {
-        alert('Por favor, selecione uma imagem válida');
-        return;
-      }
-
-      setSelectedImage(file);
-      
-      // Criar preview local
+  // Função para comprimir imagem
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreviewUrl(reader.result as string);
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          // Criar canvas para redimensionar
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          // Definir tamanho máximo (800x800 pixels)
+          let width = img.width;
+          let height = img.height;
+          const maxSize = 800;
+          
+          if (width > height) {
+            if (width > maxSize) {
+              height = (height * maxSize) / width;
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = (width * maxSize) / height;
+              height = maxSize;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          // Desenhar imagem redimensionada
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          // Converter para base64 com compressão (qualidade 0.7)
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+          
+          // Verificar tamanho
+          const sizeInBytes = (compressedBase64.length * 3) / 4;
+          const sizeInKB = sizeInBytes / 1024;
+          
+          console.log(`Imagem comprimida: ${sizeInKB.toFixed(0)}KB`);
+          
+          resolve(compressedBase64);
+        };
+        img.onerror = reject;
+        img.src = e.target?.result as string;
       };
+      reader.onerror = reject;
       reader.readAsDataURL(file);
-    }
+    });
   };
 
-  const uploadImageToImgBB = async (file: File): Promise<string> => {
-    if (IMGBB_API_KEY === 'SUA_CHAVE_AQUI') {
-      throw new Error('Configure sua chave API do ImgBB primeiro!\nPegue em: https://api.imgbb.com/');
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validar tamanho original (máximo 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('A imagem deve ter no máximo 10MB');
+      return;
     }
 
-    const formData = new FormData();
-    formData.append('image', file);
-
-    setUploadProgress('Enviando imagem para ImgBB...');
-    
-    const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error('Falha no upload da imagem');
+    // Validar tipo
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor, selecione uma imagem válida');
+      return;
     }
 
-    const data = await response.json();
-    
-    if (!data.success) {
-      throw new Error(data.error?.message || 'Erro ao fazer upload');
+    try {
+      setUploadProgress('Comprimindo imagem...');
+      const compressedImage = await compressImage(file);
+      setFormData(prev => ({ ...prev, imageUrl: compressedImage }));
+      setUploadProgress('');
+    } catch (error) {
+      console.error('Erro ao comprimir imagem:', error);
+      alert('Erro ao processar imagem. Tente outra foto.');
+      setUploadProgress('');
     }
-
-    setUploadProgress('Imagem enviada com sucesso!');
-    return data.data.url; // URL da imagem hospedada
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -135,20 +152,13 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
     
     try {
       const db = getFirestore();
-      
-      // Upload da imagem se uma nova foi selecionada
-      let imageUrl = formData.imageUrl || '';
-      if (selectedImage) {
-        imageUrl = await uploadImageToImgBB(selectedImage);
-      }
-
       setUploadProgress('Salvando no banco de dados...');
 
       const toyData: Omit<Toy, 'id'> = {
         name: formData.name || 'Sem Nome',
         category: formData.category || categories[0] || 'Geral',
         price: formData.price || 0,
-        imageUrl: imageUrl,
+        imageUrl: formData.imageUrl || '',
         size: formData.size || '',
         quantity: formData.quantity || 1,
         description: formData.description,
@@ -169,8 +179,6 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
       setUploadProgress('');
       setIsModalOpen(false);
       setEditingToy(null);
-      setSelectedImage(null);
-      setPreviewUrl('');
     } catch (error) {
       console.error("Erro ao salvar brinquedo:", error);
       setUploadProgress('');
@@ -314,8 +322,8 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
             
             <div className="space-y-6">
                 <div className="w-full h-40 md:h-48 rounded-[32px] overflow-hidden bg-slate-50 border-2 border-dashed border-slate-200 relative group">
-                    {previewUrl ? (
-                      <img src={previewUrl} className="w-full h-full object-cover" alt="Preview" />
+                    {formData.imageUrl ? (
+                      <img src={formData.imageUrl} className="w-full h-full object-cover" alt="Preview" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-slate-400 flex-col gap-2">
                         <Upload size={48} />
@@ -328,7 +336,7 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
                       disabled={isSaving}
                       className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white flex-col gap-2 font-black text-xs uppercase tracking-widest disabled:cursor-not-allowed"
                     >
-                        <Upload size={24}/> {selectedImage ? 'Trocar Foto' : previewUrl ? 'Alterar Foto' : 'Adicionar Foto'}
+                        <Upload size={24}/> {formData.imageUrl?.startsWith('data:') ? 'Trocar Foto' : 'Adicionar Foto'}
                     </button>
                     <input 
                       type="file" 
@@ -339,14 +347,6 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
                       disabled={isSaving}
                     />
                 </div>
-                
-                {selectedImage && (
-                  <div className="bg-green-50 border border-green-200 rounded-2xl p-3 text-center">
-                    <p className="text-xs text-green-700 font-bold">
-                      📷 Nova imagem: {selectedImage.name} ({(selectedImage.size / 1024).toFixed(0)}KB)
-                    </p>
-                  </div>
-                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                     <div className="space-y-1">
