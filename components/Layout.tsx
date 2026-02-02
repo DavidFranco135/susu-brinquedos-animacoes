@@ -19,19 +19,21 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, onUpdateUser 
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
-  // CORREÇÃO: Filtra os itens do menu baseando-se no papel (ADMIN) 
-  // OU se o ID do item está na lista de páginas autorizadas (allowedPages)
+  // --- CORREÇÃO AQUI: FILTRO DE ACESSO ---
   const filteredMenuItems = MENU_ITEMS.filter(item => {
-    // Se for administrador total, vê tudo
-    if (user?.role === UserRole.ADMIN) return true;
-    
-    // Para colaboradores, verifica se o 'id' do menu está nas permissões dele
-    // Note: O 'item.path' costuma ser '/brinquedos', mas o ID na permissão é 'toys'
-    // Ajustamos aqui para validar tanto pelo path quanto pelo campo adminOnly
-    const pageId = item.path.replace('/', '') || 'dashboard';
-    
-    // Se o item não for exclusivo de admin e estiver autorizado, ele aparece
-    return user?.allowedPages?.includes(pageId);
+    // Se não houver usuário, não mostra nada
+    if (!user) return false;
+
+    // Se for ADMIN, tem acesso a tudo
+    if (user.role === UserRole.ADMIN) return true;
+
+    // Se for COLABORADOR:
+    // 1. Não mostra o que é exclusivo de Admin (como Staff ou Configurações)
+    if (item.adminOnly) return false;
+
+    // 2. Verifica se o ID da página está na lista de autorizados do colaborador
+    // O 'item.id' deve corresponder ao que salvamos em 'allowedPages' (ex: 'rentals', 'toys')
+    return user.allowedPages?.includes(item.id || '');
   });
 
   const handlePhotoClick = () => {
@@ -50,83 +52,83 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, onUpdateUser 
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
-      {/* Menu Mobile */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-100 flex items-center justify-between px-6 z-50">
-        <h1 className="font-black text-slate-800">Susu Eventos</h1>
-        <button onClick={toggleSidebar} className="p-2 text-slate-600">
-          {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
-      </div>
+    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
+      {/* Botão Mobile */}
+      <button 
+        onClick={toggleSidebar}
+        className="fixed top-4 left-4 z-50 p-3 bg-white rounded-2xl shadow-xl text-slate-600 md:hidden"
+      >
+        {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
+      </button>
 
       {/* Sidebar */}
       <aside className={`
         fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-100 transform transition-transform duration-300 ease-in-out flex flex-col
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         md:relative md:translate-x-0
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <div className="p-8 flex flex-col items-center border-b border-slate-50">
-          <div className="relative group mb-4">
-            <div className="w-24 h-24 rounded-[32px] bg-slate-100 border-4 border-white shadow-xl overflow-hidden flex items-center justify-center">
+        <div className="p-8 pt-12 flex flex-col items-center">
+          <div className="relative group cursor-pointer mb-4" onClick={handlePhotoClick}>
+            <div className="w-24 h-24 rounded-[32px] bg-slate-50 border-4 border-white shadow-xl overflow-hidden flex items-center justify-center">
               {user?.profilePhotoUrl ? (
-                <img src={user.profilePhotoUrl} alt="Perfil" className="w-full h-full object-cover" />
+                <img src={user.profilePhotoUrl} className="w-full h-full object-cover" alt="Perfil" />
               ) : (
-                <UserIcon size={32} className="text-slate-300" />
+                <UserIcon size={40} className="text-slate-200" />
               )}
             </div>
-            <button 
-              onClick={handlePhotoClick}
-              className="absolute bottom-0 right-0 p-2 bg-blue-600 text-white rounded-xl shadow-lg hover:bg-blue-700 transition-all scale-90 group-hover:scale-100"
-            >
-              <Camera size={16} />
-            </button>
+            <div className="absolute inset-0 bg-blue-600/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center text-white rounded-[32px]">
+              <Camera size={20} />
+            </div>
             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
           </div>
-          <h3 className="font-black text-slate-800 text-center">{user?.name}</h3>
-          <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">
+          <p className="text-[10px] font-black text-blue-600 uppercase tracking-[2px] mb-1">
             {user?.role === UserRole.ADMIN ? 'Administrador' : 'Colaborador'}
           </p>
+          <h3 className="text-lg font-black text-slate-800">{user?.name}</h3>
         </div>
 
         <nav className="flex-1 px-6 py-6 space-y-2 overflow-y-auto custom-scrollbar">
           {filteredMenuItems.map((item) => (
             <button
               key={item.path}
-              onClick={() => { navigate(item.path); toggleSidebar(); }}
+              onClick={() => { navigate(item.path); setIsSidebarOpen(false); }}
               className={`w-full flex items-center space-x-3 px-5 py-3.5 rounded-2xl transition-all ${
                 location.pathname === item.path 
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' 
-                : 'text-slate-500 hover:bg-slate-50 hover:text-blue-600'
+                : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600'
               }`}
             >
-              <span className={location.pathname === item.path ? 'text-white' : 'text-slate-400'}>
-                {item.icon}
-              </span>
-              <span className="text-[14px] font-bold">{item.label}</span>
+              {item.icon}
+              <span className="text-sm font-bold">{item.label}</span>
             </button>
           ))}
         </nav>
 
         <div className="p-6">
-          <button onClick={onLogout} className="w-full flex items-center justify-center space-x-3 px-4 py-4 rounded-2xl text-red-500 bg-red-50 font-black text-xs uppercase hover:bg-red-100 transition-all">
+          <button 
+            onClick={onLogout} 
+            className="w-full flex items-center justify-center space-x-3 px-4 py-4 rounded-2xl text-red-500 bg-red-50 font-black text-[10px] uppercase tracking-widest hover:bg-red-100 transition-all"
+          >
             <LogOut size={18} />
-            <span>Sair</span>
+            <span>Sair do Sistema</span>
           </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto pt-16 md:pt-0">
-        <div className="max-w-7xl mx-auto px-4 md:px-10 py-6 md:py-10">
+      {/* Overlay para Mobile */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-30 md:hidden"
+          onClick={toggleSidebar}
+        />
+      )}
+
+      {/* Conteúdo Principal */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-7xl mx-auto px-4 md:px-10 py-8">
           {children}
         </div>
       </main>
-
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 10px; }
-      `}</style>
     </div>
   );
 };
