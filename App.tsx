@@ -83,7 +83,7 @@ const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
              {company?.logoUrl ? <img src={company.logoUrl} className="w-full h-full object-cover" alt="Logo" /> : <UserIcon size={40} className="text-white" />}
           </div>
           <h2 className="text-xl font-black text-slate-800 tracking-widest uppercase">MAIS QUE BRINQUEDOS,</h2>
-          <p className="text-slate-500 mt-1 font-medium text-sm">{company?.name || 'MOMENTOS FELIZES!'}</p>
+          <p className="text-slate-500 mt-1 font-medium text-sm">{company?.name || 'SUSU Eventos'}</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6 w-full">
           {error && <div className="p-4 bg-red-50 text-red-500 text-xs font-bold rounded-2xl text-center">{error}</div>}
