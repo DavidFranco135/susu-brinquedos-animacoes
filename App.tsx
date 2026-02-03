@@ -30,9 +30,8 @@ import CustomersPage from './pages/CustomersPage';
 import BudgetsPage from './pages/BudgetsPage';
 import DocumentsPage from './pages/DocumentsPage';
 import PublicRentalSummary from './pages/PublicRentalSummary';
-import PublicCatalog from './PublicCatalog'; // ← NOVO IMPORT
 import { Customer, Toy, Rental, User, UserRole, FinancialTransaction, CompanySettings as CompanyType } from './types';
-import { User as UserIcon, Loader2, ExternalLink } from 'lucide-react';
+import { User as UserIcon, Loader2 } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBUvwY-e7h0KZyFJv7n0ignpzlMUGJIurU",
@@ -48,10 +47,10 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// COMPONENTE DE LOGIN COM FUNDO PERSONALIZADO + BOTÃO CATÁLOGO
+// COMPONENTE DE LOGIN COM FUNDO PERSONALIZADO
 const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('admsusu@gmail.com');
+  const [password, setPassword] = useState('123456');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -82,8 +81,7 @@ const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
           <div className="w-24 h-24 bg-blue-600 rounded-[30px] flex items-center justify-center mb-6 shadow-xl overflow-hidden">
              {company?.logoUrl ? <img src={company.logoUrl} className="w-full h-full object-cover" alt="Logo" /> : <UserIcon size={40} className="text-white" />}
           </div>
-          <h2 className="text-xl font-black text-slate-800 tracking-widest uppercase">MAIS QUE BRINQUEDOS,
-          momentos felizes.</h2>
+          <h2 className="text-xl font-black text-slate-800 tracking-widest uppercase">Acesso ao Painel</h2>
           <p className="text-slate-500 mt-1 font-medium text-sm">{company?.name || 'SUSU Eventos'}</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6 w-full">
@@ -94,16 +92,6 @@ const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
             {loading ? <Loader2 className="animate-spin" size={20}/> : 'Entrar'}
           </button>
         </form>
-        
-        {/* ← NOVO BOTÃO PARA ACESSAR O CATÁLOGO PÚBLICO */}
-        <div className="w-full mt-6 pt-6 border-t border-slate-200">
-          <a 
-            href="#/catalogo" 
-            className="w-full flex items-center justify-center gap-3 bg-slate-50 text-slate-600 font-black py-4 rounded-2xl hover:bg-slate-100 transition-all text-xs uppercase tracking-widest"
-          >
-            <ExternalLink size={16} /> Ver Catálogo Público
-          </a>
-        </div>
       </div>
     </div>
   );
@@ -192,9 +180,6 @@ const App: React.FC = () => {
   return (
     <Router>
       <Routes>
-        {/* ← NOVA ROTA PÚBLICA DO CATÁLOGO */}
-        <Route path="/catalogo" element={<PublicCatalog />} />
-        
         <Route path="/resumo/:id" element={<PublicRentalSummary rentals={rentals} toys={toys} company={company || {} as CompanyType} />} />
         <Route path="*" element={
           !user ? <Login company={company} /> : (
