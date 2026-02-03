@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Plus, Search, Edit3, X, Save, Upload, Trash2, Settings, Maximize } from 'lucide-react';
+import { Plus, Search, Edit3, X, Save, Upload, Trash2, Settings, Maximize, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Toy, ToyStatus, User, UserRole } from '../types';
 import { getFirestore, doc, deleteDoc, setDoc, addDoc, collection } from 'firebase/firestore';
 
@@ -19,6 +19,13 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
   const [isSaving, setIsSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Estados para visualização de álbum
+  const [viewingAlbum, setViewingAlbum] = useState<Toy | null>(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  
+  // Estado para visualização de descrição completa
+  const [viewingDescription, setViewingDescription] = useState<Toy | null>(null);
 
   const userStr = localStorage.getItem('susu_user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
@@ -29,6 +36,7 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
     category: categories[0] || 'Geral',
     price: 0,
     imageUrl: '',
+    images: [],
     size: '',
     quantity: 1,
     description: '',
@@ -44,7 +52,13 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
     if (!isAdmin) return;
     if (toy) {
       setEditingToy(toy);
-      setFormData(toy);
+      // Migrar imageUrl para images se necessário
+      const images = toy.images && toy.images.length > 0 
+        ? toy.images 
+        : toy.imageUrl 
+          ? [toy.imageUrl] 
+          : [];
+      setFormData({ ...toy, images });
     } else {
       setEditingToy(null);
       const defaultImage = 'https://images.unsplash.com/photo-1533749047139-189de3cf06d3?auto=format&fit=crop&q=80&w=400';
@@ -53,6 +67,7 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
         category: categories[0] || 'Geral',
         price: 0,
         imageUrl: defaultImage,
+        images: [defaultImage],
         size: '',
         quantity: 1,
         description: '',
@@ -117,31 +132,62 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validar tamanho original (máximo 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      alert('A imagem deve ter no máximo 10MB');
-      return;
-    }
-
-    // Validar tipo
-    if (!file.type.startsWith('image/')) {
-      alert('Por favor, selecione uma imagem válida');
-      return;
-    }
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
     try {
-      setUploadProgress('Comprimindo imagem...');
-      const compressedImage = await compressImage(file);
-      setFormData(prev => ({ ...prev, imageUrl: compressedImage }));
+      setUploadProgress('Comprimindo imagens...');
+      const compressedImages: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        // Validar tamanho original (máximo 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+          alert(`A imagem ${file.name} deve ter no máximo 10MB`);
+          continue;
+        }
+
+        // Validar tipo
+        if (!file.type.startsWith('image/')) {
+          alert(`${file.name} não é uma imagem válida`);
+          continue;
+        }
+
+        const compressedImage = await compressImage(file);
+        compressedImages.push(compressedImage);
+      }
+
+      if (compressedImages.length > 0) {
+        setFormData(prev => {
+          const currentImages = prev.images || [];
+          const newImages = [...currentImages, ...compressedImages];
+          return { 
+            ...prev, 
+            images: newImages,
+            imageUrl: newImages[0] // Manter compatibilidade
+          };
+        });
+      }
+      
       setUploadProgress('');
     } catch (error) {
-      console.error('Erro ao comprimir imagem:', error);
-      alert('Erro ao processar imagem. Tente outra foto.');
+      console.error('Erro ao comprimir imagens:', error);
+      alert('Erro ao processar imagens. Tente outras fotos.');
       setUploadProgress('');
     }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setFormData(prev => {
+      const newImages = [...(prev.images || [])];
+      newImages.splice(index, 1);
+      return {
+        ...prev,
+        images: newImages,
+        imageUrl: newImages[0] || '' // Manter compatibilidade
+      };
+    });
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -158,118 +204,202 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
         name: formData.name || 'Sem Nome',
         category: formData.category || categories[0] || 'Geral',
         price: formData.price || 0,
-        imageUrl: formData.imageUrl || '',
+        imageUrl: formData.images && formData.images.length > 0 ? formData.images[0] : formData.imageUrl || '',
+        images: formData.images || [],
         size: formData.size || '',
         quantity: formData.quantity || 1,
-        description: formData.description,
+        description: formData.description || '',
         status: formData.status as ToyStatus
       };
 
       if (editingToy) {
         // Editando brinquedo existente
         await setDoc(doc(db, "toys", editingToy.id), toyData);
+        
+        // Atualizar no estado local
         setToys(prev => prev.map(t => t.id === editingToy.id ? { ...toyData, id: editingToy.id } : t));
       } else {
-        // Adicionando novo brinquedo
+        // Criando novo brinquedo
         const docRef = await addDoc(collection(db, "toys"), toyData);
-        const newToy: Toy = { ...toyData, id: docRef.id };
-        setToys(prev => [...prev, newToy]);
+        
+        // Adicionar ao estado local
+        setToys(prev => [...prev, { ...toyData, id: docRef.id }]);
       }
-      
-      setUploadProgress('');
+
       setIsModalOpen(false);
       setEditingToy(null);
-    } catch (error) {
-      console.error("Erro ao salvar brinquedo:", error);
       setUploadProgress('');
-      alert(`Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    } catch (error) {
+      console.error('Erro ao salvar:', error);
+      alert('Erro ao salvar brinquedo. Tente novamente.');
+      setUploadProgress('');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDeleteToy = async (id: string) => {
-    if (!confirm("Remover este brinquedo do catálogo permanentemente?")) return;
+    if (!isAdmin) return;
+    if (!window.confirm('Tem certeza que deseja excluir este brinquedo?')) return;
+
     try {
       const db = getFirestore();
       await deleteDoc(doc(db, "toys", id));
       setToys(prev => prev.filter(t => t.id !== id));
-    } catch (err) {
-      console.error("Erro ao excluir:", err);
-      alert("Erro ao excluir.");
+    } catch (error) {
+      console.error('Erro ao excluir:', error);
+      alert('Erro ao excluir brinquedo.');
     }
   };
 
-  const handleAddCategory = () => {
-    if (newCatName && !categories.includes(newCatName)) {
-      setCategories([...categories, newCatName]);
+  const handleAddCategory = async () => {
+    if (!newCatName.trim() || !isAdmin) return;
+    if (categories.includes(newCatName.trim())) {
+      alert('Categoria já existe!');
+      return;
+    }
+
+    const newCategories = [...categories, newCatName.trim()];
+    setCategories(newCategories);
+    
+    try {
+      const db = getFirestore();
+      await setDoc(doc(db, "settings", "categories"), { list: newCategories });
       setNewCatName('');
+    } catch (error) {
+      console.error('Erro ao salvar categoria:', error);
     }
   };
 
-  const handleRemoveCategory = (cat: string) => {
-    if (confirm(`Remover categoria "${cat}"?`)) {
-      setCategories(categories.filter(c => c !== cat));
+  const handleRemoveCategory = async (catToRemove: string) => {
+    if (!isAdmin) return;
+    if (categories.length === 1) {
+      alert('Você precisa ter pelo menos uma categoria!');
+      return;
     }
+
+    const newCategories = categories.filter(c => c !== catToRemove);
+    setCategories(newCategories);
+    
+    try {
+      const db = getFirestore();
+      await setDoc(doc(db, "settings", "categories"), { list: newCategories });
+    } catch (error) {
+      console.error('Erro ao remover categoria:', error);
+    }
+  };
+
+  const openAlbumViewer = (toy: Toy) => {
+    setViewingAlbum(toy);
+    setCurrentImageIndex(0);
+  };
+
+  const closeAlbumViewer = () => {
+    setViewingAlbum(null);
+    setCurrentImageIndex(0);
+  };
+
+  const nextImage = () => {
+    if (!viewingAlbum) return;
+    const images = viewingAlbum.images && viewingAlbum.images.length > 0 
+      ? viewingAlbum.images 
+      : viewingAlbum.imageUrl 
+        ? [viewingAlbum.imageUrl] 
+        : [];
+    setCurrentImageIndex((prev) => (prev + 1) % images.length);
+  };
+
+  const prevImage = () => {
+    if (!viewingAlbum) return;
+    const images = viewingAlbum.images && viewingAlbum.images.length > 0 
+      ? viewingAlbum.images 
+      : viewingAlbum.imageUrl 
+        ? [viewingAlbum.imageUrl] 
+        : [];
+    setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
+  };
+
+  const getToyMainImage = (toy: Toy): string => {
+    if (toy.images && toy.images.length > 0) {
+      return toy.images[0];
+    }
+    return toy.imageUrl || 'https://images.unsplash.com/photo-1533749047139-189de3cf06d3?auto=format&fit=crop&q=80&w=400';
+  };
+
+  const getToyImages = (toy: Toy): string[] => {
+    if (toy.images && toy.images.length > 0) {
+      return toy.images;
+    }
+    return toy.imageUrl ? [toy.imageUrl] : [];
   };
 
   return (
-    <div className="space-y-10">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-black text-slate-800 tracking-tight">Catálogo de Atrações</h1>
-          <p className="text-slate-500 font-medium">Gestão técnica de brinquedos e equipamentos.</p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-3">
-          {isAdmin && (
-            <button onClick={() => setIsCatModalOpen(true)} className="flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-600 px-6 py-3 md:py-4 rounded-3xl font-black text-xs md:text-sm uppercase tracking-widest hover:bg-slate-50 transition-all">
-              <Settings size={20} /> Categorias
-            </button>
-          )}
-          {isAdmin && (
-            <button onClick={() => handleOpenModal()} className="flex items-center justify-center gap-3 bg-gradient-to-br from-blue-500 to-blue-700 text-white px-6 md:px-8 py-3 md:py-4 rounded-3xl font-black text-xs md:text-sm uppercase tracking-widest shadow-xl shadow-blue-100 hover:scale-105 transition-all">
-              <Plus size={20} strokeWidth={3} /> Cadastrar Brinquedo
-            </button>
-          )}
-        </div>
-      </header>
-
-      <div className="flex items-center gap-4 bg-white p-2 rounded-3xl border shadow-sm">
+    <div className="max-w-screen-2xl mx-auto px-4 md:px-8 py-6 md:py-8">
+      <div className="flex flex-col md:flex-row gap-4 md:gap-6 mb-8 md:mb-10">
         <div className="relative flex-1">
-          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-          <input type="text" placeholder="Buscar por nome ou categoria..." className="w-full pl-16 pr-6 py-3 md:py-4 bg-transparent outline-none font-bold text-slate-700 text-sm md:text-base" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+          <input 
+            type="text" 
+            placeholder="Buscar brinquedos..." 
+            className="w-full pl-14 pr-6 py-4 md:py-5 bg-white rounded-full border-0 text-slate-700 font-bold text-sm shadow-lg focus:ring-4 focus:ring-blue-100 transition-all" 
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
         </div>
+        {isAdmin && (
+          <>
+            <button onClick={() => setIsCatModalOpen(true)} className="px-6 md:px-8 py-4 md:py-5 bg-slate-700 text-white rounded-full font-black text-xs md:text-sm uppercase tracking-widest shadow-lg shadow-slate-200 hover:bg-slate-800 transition-all flex items-center justify-center gap-2 whitespace-nowrap">
+              <Settings size={18}/> Categorias
+            </button>
+            <button onClick={() => handleOpenModal()} className="px-6 md:px-8 py-4 md:py-5 bg-blue-600 text-white rounded-full font-black text-xs md:text-sm uppercase tracking-widest shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 whitespace-nowrap">
+              <Plus size={20}/> Adicionar
+            </button>
+          </>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8">
-        {filteredToys.map((toy) => (
-          <div key={toy.id} className="bg-white rounded-[40px] border border-slate-100 overflow-hidden hover:shadow-2xl transition-all group flex flex-col">
-            <div className="relative h-48 md:h-56 overflow-hidden bg-slate-50">
-              <img src={toy.imageUrl} alt={toy.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-              <div className="absolute top-4 left-4 flex flex-col gap-2">
-                <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-lg bg-white ${toy.status === ToyStatus.AVAILABLE ? 'text-emerald-500' : 'text-red-500'}`}>
-                  {toy.status}
-                </span>
-                {toy.size && (
-                  <span className="px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-lg bg-blue-600 text-white flex items-center gap-2">
-                    <Maximize size={12}/> {toy.size}
-                  </span>
-                )}
-              </div>
-              <div className="absolute top-4 right-4 flex flex-col gap-2">
-                 <div className="bg-slate-900/80 text-white px-3 py-1.5 rounded-xl text-[10px] font-black backdrop-blur-sm">
-                    QTD: {toy.quantity}
-                 </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+        {filteredToys.map(toy => (
+          <div key={toy.id} className="group bg-white rounded-[32px] overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
+            <div className="relative h-56 md:h-64 overflow-hidden bg-slate-50">
+              <img 
+                src={getToyMainImage(toy)} 
+                alt={toy.name} 
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 cursor-pointer" 
+                onClick={() => openAlbumViewer(toy)}
+              />
+              {getToyImages(toy).length > 1 && (
+                <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-sm text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                  <Maximize size={12} />
+                  {getToyImages(toy).length} fotos
+                </div>
+              )}
+              <div className="absolute top-3 left-3 bg-blue-600 text-white px-3 md:px-4 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs font-black uppercase tracking-widest shadow-lg">
+                {toy.category}
               </div>
             </div>
-            <div className="p-6 md:p-7 flex-1 flex flex-col">
-              <span className="text-[11px] font-black text-blue-500 uppercase tracking-widest mb-2 block">{toy.category}</span>
-              <h3 className="text-lg md:text-xl font-black text-slate-800 mb-2 leading-tight">{toy.name}</h3>
-              
-              <div className="mt-auto pt-6 flex items-center justify-between border-t border-slate-50">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor Diária</span>
-                  <p className="text-xl md:text-2xl font-black text-slate-900">R$ {toy.price.toLocaleString('pt-BR')}</p>
+            <div className="p-4 md:p-6 space-y-3 md:space-y-4">
+              <div>
+                <h3 className="text-base md:text-lg font-black text-slate-800 mb-1 md:mb-2 leading-tight">{toy.name}</h3>
+                {toy.size && <p className="text-xs md:text-sm text-slate-500 font-bold">Tamanho: {toy.size}</p>}
+                {toy.description && (
+                  <div className="mt-2">
+                    <p className="text-xs text-slate-400 line-clamp-2">{toy.description}</p>
+                    {toy.description.length > 100 && (
+                      <button
+                        onClick={() => setViewingDescription(toy)}
+                        className="text-xs text-blue-600 font-bold hover:text-blue-700 mt-1 underline"
+                      >
+                        Ver mais
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between pt-3 md:pt-4 border-t border-slate-100">
+                <div>
+                  <p className="text-[10px] md:text-xs text-slate-500 font-black uppercase mb-1">Valor a partir de:</p>
+                  <p className="text-xl md:text-1xl font-black text-blue-600">R$ {toy.price.toFixed(2)}</p>
                 </div>
                 {isAdmin && (
                   <div className="flex gap-2">
@@ -282,6 +412,130 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
           </div>
         ))}
       </div>
+
+      {/* Modal de Descrição Completa */}
+      {viewingDescription && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[120] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[40px] max-w-2xl w-full p-8 shadow-2xl relative">
+            <button 
+              onClick={() => setViewingDescription(null)}
+              className="absolute top-6 right-6 p-2 hover:bg-slate-100 rounded-full transition-all"
+            >
+              <X size={24} className="text-slate-400" />
+            </button>
+            
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-2xl font-black text-slate-800 mb-2">{viewingDescription.name}</h2>
+                <div className="flex items-center gap-3 text-sm text-slate-500 font-bold">
+                  <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-black uppercase">
+                    {viewingDescription.category}
+                  </span>
+                  {viewingDescription.size && <span>• Tamanho: {viewingDescription.size}</span>}
+                </div>
+              </div>
+              
+              <div className="border-t border-slate-100 pt-4">
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-3">Descrição Completa</h3>
+                <p className="text-slate-600 leading-relaxed whitespace-pre-line">
+                  {viewingDescription.description}
+                </p>
+              </div>
+              
+              <div className="border-t border-slate-100 pt-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Valor da Locação 
+                  a partir de:</p>
+                  <p className="text-3xl font-black text-blue-600">R$ {viewingDescription.price.toFixed(2)}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setViewingDescription(null);
+                    openAlbumViewer(viewingDescription);
+                  }}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm hover:bg-blue-700 transition-all flex items-center gap-2"
+                >
+                  <Maximize size={16} />
+                  Ver Fotos
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Visualização de Álbum */}
+      {viewingAlbum && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[120] flex items-center justify-center p-4">
+          <button 
+            onClick={closeAlbumViewer}
+            className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all z-10"
+          >
+            <X size={24} />
+          </button>
+          
+          <div className="relative w-full max-w-4xl">
+            {getToyImages(viewingAlbum).length > 1 && (
+              <>
+                <button
+                  onClick={prevImage}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all z-10"
+                >
+                  <ChevronLeft size={32} />
+                </button>
+                <button
+                  onClick={nextImage}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all z-10"
+                >
+                  <ChevronRight size={32} />
+                </button>
+              </>
+            )}
+            
+            <div className="bg-slate-900 rounded-3xl overflow-hidden">
+              <img
+                src={getToyImages(viewingAlbum)[currentImageIndex]}
+                alt={`${viewingAlbum.name} - Foto ${currentImageIndex + 1}`}
+                className="w-full h-auto max-h-[80vh] object-contain"
+              />
+              
+              <div className="p-6 text-white">
+                <h3 className="text-2xl font-black mb-2">{viewingAlbum.name}</h3>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-slate-300">
+                    Foto {currentImageIndex + 1} de {getToyImages(viewingAlbum).length}
+                  </p>
+                  <p className="text-xl font-bold text-blue-400">
+                    R$ {viewingAlbum.price.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            {getToyImages(viewingAlbum).length > 1 && (
+              <div className="flex gap-2 justify-center mt-4 overflow-x-auto pb-2">
+                {getToyImages(viewingAlbum).map((img, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentImageIndex(idx)}
+                    className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                      idx === currentImageIndex 
+                        ? 'border-blue-500 ring-2 ring-blue-500/50' 
+                        : 'border-white/30 hover:border-white/60'
+                    }`}
+                  >
+                    <img
+                      src={img}
+                      alt={`Miniatura ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {isCatModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-4 md:p-6">
@@ -321,31 +575,71 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
             )}
             
             <div className="space-y-6">
-                <div className="w-full h-40 md:h-48 rounded-[32px] overflow-hidden bg-slate-50 border-2 border-dashed border-slate-200 relative group">
-                    {formData.imageUrl ? (
-                      <img src={formData.imageUrl} className="w-full h-full object-cover" alt="Preview" />
-                    ) : (
+                {/* Galeria de Imagens */}
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-slate-400 uppercase">Fotos do Brinquedo</label>
+                  
+                  {formData.images && formData.images.length > 0 ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {formData.images.map((img, idx) => (
+                        <div key={idx} className="relative group h-32 rounded-2xl overflow-hidden bg-slate-50 border-2 border-slate-200">
+                          <img src={img} className="w-full h-full object-cover" alt={`Foto ${idx + 1}`} />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImage(idx)}
+                            disabled={isSaving}
+                            className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all hover:bg-red-600 disabled:cursor-not-allowed"
+                          >
+                            <X size={16} />
+                          </button>
+                          {idx === 0 && (
+                            <div className="absolute bottom-2 left-2 bg-blue-600 text-white px-2 py-1 rounded-full text-[10px] font-bold">
+                              Principal
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isSaving}
+                        className="h-32 rounded-2xl border-2 border-dashed border-slate-300 hover:border-blue-500 transition-all flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-blue-600 disabled:cursor-not-allowed"
+                      >
+                        <Plus size={24} />
+                        <span className="text-xs font-bold">Adicionar</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-full h-40 md:h-48 rounded-[32px] overflow-hidden bg-slate-50 border-2 border-dashed border-slate-200 relative group">
                       <div className="w-full h-full flex items-center justify-center text-slate-400 flex-col gap-2">
                         <Upload size={48} />
-                        <p className="text-xs font-bold">Clique para adicionar foto</p>
+                        <p className="text-xs font-bold">Clique para adicionar fotos</p>
                       </div>
-                    )}
-                    <button 
-                      type="button" 
-                      onClick={()=>fileInputRef.current?.click()} 
-                      disabled={isSaving}
-                      className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white flex-col gap-2 font-black text-xs uppercase tracking-widest disabled:cursor-not-allowed"
-                    >
-                        <Upload size={24}/> {formData.imageUrl?.startsWith('data:') ? 'Trocar Foto' : 'Adicionar Foto'}
-                    </button>
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      className="hidden" 
-                      accept="image/*" 
-                      onChange={handleImageUpload}
-                      disabled={isSaving}
-                    />
+                      <button 
+                        type="button" 
+                        onClick={() => fileInputRef.current?.click()} 
+                        disabled={isSaving}
+                        className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white flex-col gap-2 font-black text-xs uppercase tracking-widest disabled:cursor-not-allowed"
+                      >
+                        <Upload size={24}/> Adicionar Fotos
+                      </button>
+                    </div>
+                  )}
+                  
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    accept="image/*" 
+                    multiple
+                    onChange={handleImageUpload}
+                    disabled={isSaving}
+                  />
+                  
+                  <p className="text-xs text-slate-400 italic">
+                    Você pode selecionar múltiplas fotos. A primeira será a foto principal.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
@@ -403,6 +697,18 @@ const Inventory: React.FC<InventoryProps> = ({ toys, setToys, categories, setCat
                             {Object.values(ToyStatus).map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                     </div>
+                </div>
+
+                <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase">Descrição do Brinquedo (Opcional)</label>
+                    <textarea 
+                      disabled={isSaving}
+                      rows={3}
+                      className="w-full px-4 py-3 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 text-sm disabled:opacity-50 resize-none" 
+                      value={formData.description || ''} 
+                      onChange={e=>setFormData({...formData, description: e.target.value})}
+                      placeholder="Adicione detalhes sobre o brinquedo, como características especiais, idade recomendada, etc."
+                    />
                 </div>
 
                 <div className="space-y-1">
