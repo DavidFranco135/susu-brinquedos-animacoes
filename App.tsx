@@ -30,7 +30,7 @@ import CustomersPage from './pages/CustomersPage';
 import BudgetsPage from './pages/BudgetsPage';
 import DocumentsPage from './pages/DocumentsPage';
 import PublicRentalSummary from './pages/PublicRentalSummary';
-import PublicCatalog from './PublicCatalog';
+import PublicCatalog from './PublicCatalog'; // ← NOVO IMPORT
 import { Customer, Toy, Rental, User, UserRole, FinancialTransaction, CompanySettings as CompanyType } from './types';
 import { User as UserIcon, Loader2, ExternalLink } from 'lucide-react';
 
@@ -95,6 +95,7 @@ const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
           </button>
         </form>
         
+        {/* ← NOVO BOTÃO PARA ACESSAR O CATÁLOGO PÚBLICO */}
         <div className="w-full mt-6 pt-6 border-t border-slate-200">
           <a 
             href="#/catalogo" 
@@ -118,20 +119,6 @@ const App: React.FC = () => {
   const [staff, setStaff] = useState<User[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [company, setCompany] = useState<CompanyType | null>(null);
-  const [adminEmail, setAdminEmail] = useState<string>('admsusu@gmail.com');
-
-  // ✅ CORREÇÃO: Carrega o email admin salvo no Firestore
-  useEffect(() => {
-    const unsubAdmin = onSnapshot(doc(db, "settings", "admin"), (docSnap) => {
-      if (docSnap.exists() && docSnap.data().email) {
-        setAdminEmail(docSnap.data().email);
-      } else {
-        // Se não existir, cria com o email padrão
-        setDoc(doc(db, "settings", "admin"), { email: 'admsusu@gmail.com' });
-      }
-    });
-    return () => unsubAdmin();
-  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -146,7 +133,7 @@ const App: React.FC = () => {
               id: firebaseUser.uid,
               name: firebaseUser.email?.split('@')[0] || 'Usuário',
               email: firebaseUser.email || '',
-              role: firebaseUser.email === adminEmail ? UserRole.ADMIN : UserRole.EMPLOYEE,
+              role: firebaseUser.email === 'admsusu@gmail.com' ? UserRole.ADMIN : UserRole.EMPLOYEE,
               allowedPages: []
             };
             setDoc(doc(db, "users", firebaseUser.uid), newUser);
@@ -161,7 +148,7 @@ const App: React.FC = () => {
       }
     });
     return () => unsubscribe();
-  }, [adminEmail]);
+  }, []);
 
   useEffect(() => {
     // Carrega dados da empresa mesmo deslogado para o Login
@@ -169,7 +156,7 @@ const App: React.FC = () => {
       if (docSnap.exists()) setCompany(docSnap.data() as CompanyType);
     });
 
-    if (!user) return () => unsubCompany();
+    if (!user) return;
 
     const unsubToys = onSnapshot(query(collection(db, "toys"), orderBy("name")), (snap) => setToys(snap.docs.map(d => ({ ...d.data(), id: d.id } as Toy))));
     const unsubCustomers = onSnapshot(query(collection(db, "customers"), orderBy("name")), (snap) => setCustomers(snap.docs.map(d => ({ ...d.data(), id: d.id } as Customer))));
@@ -178,15 +165,7 @@ const App: React.FC = () => {
     const unsubStaff = onSnapshot(collection(db, "users"), (snap) => setStaff(snap.docs.map(d => ({ ...d.data(), id: d.id } as User))));
     const unsubCategories = onSnapshot(doc(db, "settings", "categories"), (docSnap) => docSnap.exists() && setCategories(docSnap.data().list || []));
 
-    return () => { 
-      unsubToys(); 
-      unsubCustomers(); 
-      unsubRentals(); 
-      unsubFinancial(); 
-      unsubCompany(); 
-      unsubStaff(); 
-      unsubCategories(); 
-    };
+    return () => { unsubToys(); unsubCustomers(); unsubRentals(); unsubFinancial(); unsubCompany(); unsubStaff(); unsubCategories(); };
   }, [user]);
 
   // CORREÇÃO DEFINITIVA DA FOTO DE PERFIL
@@ -202,11 +181,7 @@ const App: React.FC = () => {
   };
 
   const handleUpdateCompany = async (updatedCompany: CompanyType) => {
-    try {
-      await setDoc(doc(db, "settings", "company"), updatedCompany);
-    } catch (e) {
-      console.error("Erro ao atualizar empresa:", e);
-    }
+    await setDoc(doc(db, "settings", "company"), updatedCompany);
   };
 
   if (initializing) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
@@ -217,6 +192,7 @@ const App: React.FC = () => {
   return (
     <Router>
       <Routes>
+        {/* ← NOVA ROTA PÚBLICA DO CATÁLOGO */}
         <Route path="/catalogo" element={<PublicCatalog />} />
         
         <Route path="/resumo/:id" element={<PublicRentalSummary rentals={rentals} toys={toys} company={company || {} as CompanyType} />} />
@@ -256,8 +232,7 @@ const App: React.FC = () => {
                 <Route path="/contratos" element={hasAccess('documents') ? <DocumentsPage type="contract" rentals={rentals} customers={customers} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
                 <Route path="/recibos" element={hasAccess('documents') ? <DocumentsPage type="receipt" rentals={rentals} customers={customers} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
                 
-                {/* ✅ CORREÇÃO: Usa adminEmail em vez de email hardcoded */}
-                <Route path="/colaboradores" element={user.role === UserRole.ADMIN ? <Staff staff={staff.filter(u => u.email !== adminEmail)} setStaff={(a: any) => { 
+                <Route path="/colaboradores" element={user.role === UserRole.ADMIN ? <Staff staff={staff.filter(u => u.email !== 'admsusu@gmail.com')} setStaff={(a: any) => { 
                   const n = typeof a === 'function' ? a(staff) : a; 
                   if (n.length < staff.length) { 
                     const r = staff.find(u => !n.find(nx => nx.id === u.id)); 
