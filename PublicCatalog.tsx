@@ -412,52 +412,83 @@ const PublicCatalog: React.FC = () => {
       )}
 
       {/* Footer */}
-      <footer className="bg-white border-t border-slate-100 mt-20">
-        <div className="max-w-7xl mx-auto px-4 md:px-10 py-10 text-center space-y-4">
-          <p className="text-slate-400 font-bold text-sm">
-            {company?.name || 'SUSU Animações e Brinquedos'}
-          </p>
-          {company?.phone && (
-            <p className="text-slate-500 font-medium text-xs">
-              WhatsApp: {21-993638102} |
-              Email: {'sususantos1234@outlook.com'} | |
-              Imstagram: @susuanimacoesebrinquedos
-            </p>
-      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-      QUEM SOMOS: ||
-          Com 11 anos de experiência em animações de festas, a Susu Animações e Brinquedos Infláveis nasceu do sonho de transformar eventos em momentos inesquecíveis. Fundada há 4 anos, a empresa é resultado da paixão e dedicação de sua fundadora Suellen Santos, que buscou criar um espaço onde a alegria e a magia pudessem contagiar todos os eventos.
+   <footer className="bg-white border-t border-slate-100 mt-20">
+  <div className="max-w-7xl mx-auto px-4 md:px-10 py-10 space-y-8">
 
-Com um compromisso inabalável com a segurança, pontualidade e qualidade, a Susu Animações e Brinquedos Infláveis oferece uma experiência única e personalizada para cada cliente. Trabalhando com carinho e atenção aos detalhes, a equipe busca fazer a felicidade de todos os convidados, tornando cada evento um momento especial e memorável.
+    {/* Nome da empresa */}
+    <div className="text-center">
+      <p className="text-slate-500 font-bold text-sm">
+        {company?.name || 'SUSU Animações e Brinquedos'}
+      </p>
 
-Missão
+      <p className="text-slate-400 font-medium text-xs mt-2">
+        WhatsApp: (21) 99363-8102 ·
+        Email: sususantos1234@outlook.com ·
+        Instagram: @susuanimacoesebrinquedos
+      </p>
+    </div>
 
-Transformar eventos em momentos inesquecíveis, com segurança, pontualidade e qualidade, trabalhando com carinho para fazer a felicidade de todos.
+    {/* Quem Somos */}
+    <div className="text-center max-w-4xl mx-auto space-y-4">
+      <p className="text-[11px] text-slate-400 font-black uppercase tracking-widest">
+        Quem Somos
+      </p>
 
-Visão
+      <p className="text-xs text-slate-500 leading-relaxed">
+        Com 11 anos de experiência em animações de festas, a <strong>Susu Animações e Brinquedos</strong> nasceu do sonho de transformar eventos em momentos inesquecíveis.
+        Fundada há 4 anos por <strong>Suellen Santos</strong>, a empresa é movida pela paixão, alegria e dedicação em criar experiências únicas para crianças e famílias.
+      </p>
 
-Ser referência em animações e brinquedos infláveis, proporcionando experiências únicas e memoráveis para nossos clientes e seus convidados.
+      <p className="text-xs text-slate-500 leading-relaxed">
+        Trabalhamos com total compromisso com a <strong>segurança</strong>, <strong>pontualidade</strong> e <strong>qualidade</strong>, sempre com carinho e atenção aos detalhes,
+        para garantir a felicidade de todos os convidados.
+      </p>
+    </div>
 
-Valores
-
-- Segurança
-- Pontualidade
-- Qualidade
-- Carinho
-- Paixão
-
-Serviços
-
-- Animações de festas
-- Aluguel de brinquedos infláveis
-        </P>
+    {/* Missão / Visão / Valores */}
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center max-w-5xl mx-auto">
+      <div>
+        <p className="text-[11px] font-black uppercase text-slate-400 mb-2">Missão</p>
+        <p className="text-xs text-slate-500">
+          Transformar eventos em momentos inesquecíveis com segurança, pontualidade e qualidade.
+        </p>
       </div>
-      
-          )}
-          <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">
-            © {new Date().getFullYear()} - Todos os direitos reservados
-          </p>
-        </div>
-      </footer>
+
+      <div>
+        <p className="text-[11px] font-black uppercase text-slate-400 mb-2">Visão</p>
+        <p className="text-xs text-slate-500">
+          Ser referência em animações e brinquedos infláveis, criando experiências memoráveis.
+        </p>
+      </div>
+
+      <div>
+        <p className="text-[11px] font-black uppercase text-slate-400 mb-2">Valores</p>
+        <p className="text-xs text-slate-500">
+          Segurança · Pontualidade · Qualidade · Carinho · Paixão
+        </p>
+      </div>
+    </div>
+
+    {/* Serviços */}
+    <div className="text-center">
+      <p className="text-[11px] font-black uppercase text-slate-400 mb-2">
+        Serviços
+      </p>
+      <p className="text-xs text-slate-500">
+        Animações de festas · Aluguel de brinquedos infláveis
+      </p>
+    </div>
+
+    {/* Copyright */}
+    <div className="text-center pt-6 border-t border-slate-100">
+      <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">
+        © {new Date().getFullYear()} · Todos os direitos reservados
+      </p>
+    </div>
+
+  </div>
+</footer>
+
     </div>
   );
 };
