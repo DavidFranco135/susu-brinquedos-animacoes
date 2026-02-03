@@ -55,7 +55,7 @@ const PublicCatalog: React.FC = () => {
 
   // Função para gerar mensagem do WhatsApp
   const handleWhatsAppClick = (toyName: string) => {
-    const phone = company?.phone?.replace(/\D/g, '') || '5521993638102';
+    const phone = company?.phone?.replace(/\D/g, '') || '+55 21 99363 8102';
     const message = encodeURIComponent(
       `Olá! Gostaria de solicitar um orçamento para: *${toyName}*`
     );
