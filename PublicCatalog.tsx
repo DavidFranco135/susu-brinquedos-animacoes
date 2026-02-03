@@ -419,9 +419,39 @@ const PublicCatalog: React.FC = () => {
           </p>
           {company?.phone && (
             <p className="text-slate-500 font-medium text-xs">
-              WhatsApp: {21-993638102} | Email: {'sususantos1234@outlook.com'}
-              {'Instagram: @susuanimacoesebrinquedos'}
+              WhatsApp: {21-993638102} |
+              Email: {'sususantos1234@outlook.com'} | |
+              Imstagram: @susuanimacoesebrinquedos
             </p>
+      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+      QUEM SOMOS: ||
+          Com 11 anos de experiência em animações de festas, a Susu Animações e Brinquedos Infláveis nasceu do sonho de transformar eventos em momentos inesquecíveis. Fundada há 4 anos, a empresa é resultado da paixão e dedicação de sua fundadora Suellen Santos, que buscou criar um espaço onde a alegria e a magia pudessem contagiar todos os eventos.
+
+Com um compromisso inabalável com a segurança, pontualidade e qualidade, a Susu Animações e Brinquedos Infláveis oferece uma experiência única e personalizada para cada cliente. Trabalhando com carinho e atenção aos detalhes, a equipe busca fazer a felicidade de todos os convidados, tornando cada evento um momento especial e memorável.
+
+Missão
+
+Transformar eventos em momentos inesquecíveis, com segurança, pontualidade e qualidade, trabalhando com carinho para fazer a felicidade de todos.
+
+Visão
+
+Ser referência em animações e brinquedos infláveis, proporcionando experiências únicas e memoráveis para nossos clientes e seus convidados.
+
+Valores
+
+- Segurança
+- Pontualidade
+- Qualidade
+- Carinho
+- Paixão
+
+Serviços
+
+- Animações de festas
+- Aluguel de brinquedos infláveis
+        </P>
+      </div>
+      
           )}
           <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">
             © {new Date().getFullYear()} - Todos os direitos reservados
