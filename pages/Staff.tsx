@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { UsersRound, Plus, ShieldCheck, Shield, Trash2, X, Lock, Eye, EyeOff, Check, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { UsersRound, Plus, ShieldCheck, Shield, Trash2, X, Lock, Eye, EyeOff, Check, Loader2, AlertCircle, RefreshCw, UserX } from 'lucide-react';
 import { User, UserRole } from '../types';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { getFirestore, doc, setDoc, deleteDoc, getDoc } from "firebase/firestore";
+import { getFunctions, httpsCallable } from "firebase/functions";
 
 interface Props {
   staff: User[];
@@ -53,14 +54,66 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
     setIsModalOpen(true);
   };
 
+  // ✅ FUNÇÃO PARA REMOVER APENAS DO FIRESTORE (mantém no Auth)
   const handleDelete = async (userId: string) => {
-    if (window.confirm("Remover este colaborador da lista? O e-mail continuará no sistema de login, mas sem acesso às páginas.")) {
+    if (window.confirm("⚠️ Remover este colaborador da lista?\n\nO email continuará no sistema de login, mas sem acesso às páginas.")) {
       try {
         await deleteDoc(doc(db, "users", userId));
         setStaff(prev => prev.filter(u => u.id !== userId));
+        alert("✅ Colaborador removido da lista!");
       } catch (e) {
-        alert("Erro ao remover colaborador.");
+        alert("❌ Erro ao remover colaborador.");
       }
+    }
+  };
+
+  // ✅ NOVA FUNÇÃO: DELETAR COMPLETAMENTE DO FIREBASE AUTH + FIRESTORE
+  const handleDeleteCompletely = async (userId: string, userEmail: string) => {
+    if (!window.confirm(
+      `⚠️ ATENÇÃO: EXCLUSÃO PERMANENTE\n\n` +
+      `Isso vai:\n` +
+      `✓ Deletar o email "${userEmail}" do sistema de login\n` +
+      `✓ Remover todos os acessos\n` +
+      `✓ Apagar permanentemente do Firebase Auth\n\n` +
+      `Esta ação NÃO pode ser desfeita!\n\n` +
+      `Deseja continuar?`
+    )) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 1. Remove do Firestore
+      await deleteDoc(doc(db, "users", userId));
+      
+      // 2. ✅ DELETAR DO FIREBASE AUTH
+      // OPÇÃO A: Usando Cloud Functions (RECOMENDADO para produção)
+      try {
+        const functions = getFunctions();
+        const deleteUser = httpsCallable(functions, 'deleteUser');
+        await deleteUser({ uid: userId });
+        alert("✅ Usuário deletado completamente do sistema!");
+      } catch (functionError) {
+        console.log("Cloud Function não disponível, tentando método alternativo...");
+        
+        // OPÇÃO B: Instrução manual (caso não tenha Cloud Functions configuradas)
+        alert(
+          "⚠️ Para deletar completamente do Firebase Auth:\n\n" +
+          "1. Acesse o Firebase Console\n" +
+          "2. Vá em Authentication > Users\n" +
+          "3. Busque pelo email: " + userEmail + "\n" +
+          "4. Delete manualmente\n\n" +
+          "O usuário já foi removido do Firestore!"
+        );
+      }
+      
+      // 3. Remove da lista local
+      setStaff(prev => prev.filter(u => u.id !== userId));
+      
+    } catch (e: any) {
+      alert("❌ Erro ao deletar: " + e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -69,13 +122,11 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
     setLoading(true);
     setError(null);
     try {
-      // Tentamos simular um login para pegar o UID desse e-mail já existente
-      // Se você souber a senha que definiu antes, ele vincula na hora.
       alert("Para vincular um e-mail já existente, o sistema tentará criar o perfil no banco de dados. Certifique-se que o nome e permissões estão preenchidos.");
       
       const tempId = `old_user_${Date.now()}`; // ID temporário se não conseguirmos o real
       const newUser: User = {
-        id: tempId, // O ideal é o UID do Auth, mas no Firestore o e-mail é a chave de busca
+        id: tempId,
         name: formData.name || 'Colaborador Recuperado',
         email: formData.email!,
         role: UserRole.EMPLOYEE,
@@ -86,7 +137,7 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
       await setDoc(doc(db, "users", newUser.id), newUser);
       setStaff(prev => [...prev, newUser]);
       setIsModalOpen(false);
-      alert("Perfil restaurado! Se o colaborador esqueceu a senha, ele deve usar a opção 'Esqueci minha senha' no login.");
+      alert("✅ Perfil restaurado! Se o colaborador esqueceu a senha, ele deve usar a opção 'Esqueci minha senha' no login.");
     } catch (e: any) {
       setError("Não foi possível restaurar: " + e.message);
     } finally {
@@ -129,6 +180,7 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
           await setDoc(doc(db, "users", newUid), newUser);
           setStaff(prev => [...prev, newUser]);
           setIsModalOpen(false);
+          alert("✅ Colaborador criado com sucesso!");
         } catch (authError: any) {
           if (authError.code === 'auth/email-already-in-use') {
             setEmailConflict(true);
@@ -179,11 +231,26 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
                 )}
               </div>
               <div className="flex gap-2">
-                <button onClick={() => handleOpenModal(member)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all">
+                <button 
+                  onClick={() => handleOpenModal(member)} 
+                  className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all"
+                  title="Editar permissões"
+                >
                   <Shield size={18} />
                 </button>
-                <button onClick={() => handleDelete(member.id)} className="p-3 bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all">
+                <button 
+                  onClick={() => handleDelete(member.id)} 
+                  className="p-3 bg-orange-50 text-orange-400 rounded-xl hover:bg-orange-500 hover:text-white transition-all"
+                  title="Remover da lista (mantém no Auth)"
+                >
                   <Trash2 size={18} />
+                </button>
+                <button 
+                  onClick={() => handleDeleteCompletely(member.id, member.email)} 
+                  className="p-3 bg-red-50 text-red-400 rounded-xl hover:bg-red-600 hover:text-white transition-all"
+                  title="DELETAR PERMANENTEMENTE do sistema"
+                >
+                  <UserX size={18} />
                 </button>
               </div>
             </div>
