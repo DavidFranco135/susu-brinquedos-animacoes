@@ -419,7 +419,7 @@ const PublicCatalog: React.FC = () => {
           </p>
           {company?.phone && (
             <p className="text-slate-500 font-medium text-xs">
-              WhatsApp: {company.phone} | Email: {company.email}
+              WhatsApp: {2131321321} | Email: {company.email}
             </p>
           )}
           <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">
