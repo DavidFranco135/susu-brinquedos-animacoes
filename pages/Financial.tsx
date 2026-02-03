@@ -3,7 +3,8 @@ import {
   TrendingUp, TrendingDown, Wallet, 
   ArrowUpCircle, ArrowDownCircle,
   BarChart3, Download, PieChart as PieChartIcon,
-  Activity, TrendingDown as TrendingDownIcon
+  Activity, TrendingDown as TrendingDownIcon,
+  Trash2
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
@@ -176,6 +177,11 @@ const Financial: React.FC<FinancialProps> = ({ rentals = [], transactions = [], 
       }
       setIsGeneratingPDF(false);
     }
+  };
+
+  const handleDeleteTransaction = (id: string) => {
+    if (!confirm('Deseja realmente excluir esta despesa?')) return;
+    setTransactions((prev: FinancialTransaction[]) => prev.filter(t => t.id !== id));
   };
 
   return (
@@ -429,6 +435,7 @@ const Financial: React.FC<FinancialProps> = ({ rentals = [], transactions = [], 
               <th className="px-8 py-4">Descrição</th>
               <th className="px-8 py-4">Data</th>
               <th className="px-8 py-4">Valor</th>
+              <th className="px-8 py-4 text-right">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y text-sm font-bold">
@@ -437,6 +444,9 @@ const Financial: React.FC<FinancialProps> = ({ rentals = [], transactions = [], 
                 <td className="px-8 py-4">Entrada: {r.customerName}</td>
                 <td className="px-8 py-4 text-slate-400">{new Date(r.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
                 <td className="px-8 py-4 text-emerald-600">+ R$ {(Number(r.entryValue) || 0).toLocaleString('pt-BR')}</td>
+                <td className="px-8 py-4 text-right">
+                  <span className="text-xs text-slate-300 italic">Vinculada à reserva</span>
+                </td>
               </tr>
             ))}
             {(activeFilter === 'Despesas' || activeFilter === 'Lucro') && stats.filteredTrans.map(t => (
@@ -444,6 +454,15 @@ const Financial: React.FC<FinancialProps> = ({ rentals = [], transactions = [], 
                 <td className="px-8 py-4">{t.description}</td>
                 <td className="px-8 py-4 text-slate-400">{new Date(t.date).toLocaleDateString('pt-BR')}</td>
                 <td className="px-8 py-4 text-rose-500">- R$ {(Number(t.value) || 0).toLocaleString('pt-BR')}</td>
+                <td className="px-8 py-4 text-right">
+                  <button 
+                    onClick={() => handleDeleteTransaction(t.id)}
+                    className="p-2 text-red-400 hover:text-white hover:bg-red-500 rounded-xl transition-all"
+                    title="Excluir despesa"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </td>
               </tr>
             ))}
             {activeFilter === 'AReceber' && stats.filteredRentals.map(r => (
@@ -451,6 +470,9 @@ const Financial: React.FC<FinancialProps> = ({ rentals = [], transactions = [], 
                 <td className="px-8 py-4">Pendente: {r.customerName}</td>
                 <td className="px-8 py-4 text-slate-400">{new Date(r.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
                 <td className="px-8 py-4 text-amber-500">R$ {((Number(r.totalValue) || 0) - (Number(r.entryValue) || 0)).toLocaleString('pt-BR')}</td>
+                <td className="px-8 py-4 text-right">
+                  <span className="text-xs text-slate-300 italic">Pendente</span>
+                </td>
               </tr>
             ))}
           </tbody>
