@@ -54,13 +54,18 @@ const PublicCatalog: React.FC = () => {
   });
 
   // Função para gerar mensagem do WhatsApp
-  const handleWhatsAppClick = (toyName: string) => {
-    const phone = company?.phone?.replace(/\D/g, '') || '+55 21 99363 8102';
-    const message = encodeURIComponent(
-      `Olá! Gostaria de solicitar um orçamento para: *${toyName}*`
-    );
-    window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-  };
+ const handleWhatsAppClick = (toyName: string) => {
+  const rawPhone = company?.phone || '5521993638102';
+
+  const phone = rawPhone.replace(/\D/g, '');
+
+  const message = encodeURIComponent(
+    `Olá! Gostaria de solicitar um orçamento para: *${toyName}*`
+  );
+
+  window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+};
+
 
   // Funções para gerenciar o álbum de fotos
   const getToyImages = (toy: Toy): string[] => {
