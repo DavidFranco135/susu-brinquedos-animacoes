@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UsersRound, Plus, ShieldCheck, Shield, Trash2, X, Lock, Eye, EyeOff, Check, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { User, UserRole } from '../types';
-import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { getFirestore, doc, setDoc, deleteDoc, getDoc } from "firebase/firestore";
 
 interface Props {
@@ -53,71 +53,14 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
     setIsModalOpen(true);
   };
 
-  // ✅ FUNÇÃO CORRIGIDA: Remove do Firestore (botão laranja)
-  const handleDelete = async (userId: string, userEmail: string) => {
-    if (!window.confirm(`⚠️ Remover ${userEmail} da lista?\n\nO email continuará podendo fazer login, mas sem permissões de acesso.`)) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // 1. Deleta do Firestore
-      await deleteDoc(doc(db, "users", userId));
-      
-      // 2. Atualiza o estado local imediatamente
-      setStaff(prev => prev.filter(u => u.id !== userId));
-      
-      alert("✅ Colaborador removido da lista!");
-    } catch (e: any) {
-      console.error("Erro ao remover:", e);
-      alert("❌ Erro ao remover colaborador: " + e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ✅ FUNÇÃO NOVA: Deleta completamente (botão vermelho)
-  const handleDeleteCompletely = async (userId: string, userEmail: string) => {
-    if (!window.confirm(
-      `🚨 ATENÇÃO: EXCLUSÃO PERMANENTE\n\n` +
-      `Isso vai deletar PERMANENTEMENTE:\n` +
-      `✓ ${userEmail}\n` +
-      `✓ Acesso ao sistema\n` +
-      `✓ Dados do Firestore\n\n` +
-      `VOCÊ NÃO PODERÁ DESFAZER!\n\n` +
-      `Para deletar do Firebase Auth também, você precisa:\n` +
-      `1. Acessar Firebase Console\n` +
-      `2. Authentication → Users\n` +
-      `3. Deletar o email manualmente\n\n` +
-      `Continuar?`
-    )) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // 1. Deleta do Firestore
-      console.log("Deletando do Firestore:", userId);
-      await deleteDoc(doc(db, "users", userId));
-      
-      // 2. Atualiza o estado local
-      setStaff(prev => prev.filter(u => u.id !== userId));
-      
-      alert(
-        `✅ Usuário removido do Firestore!\n\n` +
-        `⚠️ IMPORTANTE:\n` +
-        `O email ${userEmail} ainda existe no Firebase Auth.\n\n` +
-        `Para deletar completamente:\n` +
-        `1. Acesse: https://console.firebase.google.com\n` +
-        `2. Vá em Authentication → Users\n` +
-        `3. Busque: ${userEmail}\n` +
-        `4. Delete manualmente`
-      );
-    } catch (e: any) {
-      console.error("Erro ao deletar:", e);
-      alert("❌ Erro ao deletar: " + e.message);
-    } finally {
-      setLoading(false);
+  const handleDelete = async (userId: string) => {
+    if (window.confirm("Remover este colaborador da lista? O e-mail continuará no sistema de login, mas sem acesso às páginas.")) {
+      try {
+        await deleteDoc(doc(db, "users", userId));
+        setStaff(prev => prev.filter(u => u.id !== userId));
+      } catch (e) {
+        alert("Erro ao remover colaborador.");
+      }
     }
   };
 
@@ -126,11 +69,13 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
     setLoading(true);
     setError(null);
     try {
+      // Tentamos simular um login para pegar o UID desse e-mail já existente
+      // Se você souber a senha que definiu antes, ele vincula na hora.
       alert("Para vincular um e-mail já existente, o sistema tentará criar o perfil no banco de dados. Certifique-se que o nome e permissões estão preenchidos.");
       
-      const tempId = `old_user_${Date.now()}`;
+      const tempId = `old_user_${Date.now()}`; // ID temporário se não conseguirmos o real
       const newUser: User = {
-        id: tempId,
+        id: tempId, // O ideal é o UID do Auth, mas no Firestore o e-mail é a chave de busca
         name: formData.name || 'Colaborador Recuperado',
         email: formData.email!,
         role: UserRole.EMPLOYEE,
@@ -141,7 +86,7 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
       await setDoc(doc(db, "users", newUser.id), newUser);
       setStaff(prev => [...prev, newUser]);
       setIsModalOpen(false);
-      alert("✅ Perfil restaurado! Se o colaborador esqueceu a senha, ele deve usar a opção 'Esqueci minha senha' no login.");
+      alert("Perfil restaurado! Se o colaborador esqueceu a senha, ele deve usar a opção 'Esqueci minha senha' no login.");
     } catch (e: any) {
       setError("Não foi possível restaurar: " + e.message);
     } finally {
@@ -157,14 +102,11 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
 
     try {
       if (editingUser) {
-        // Editando usuário existente
         const updatedUser = { ...editingUser, ...formData } as User;
         await setDoc(doc(db, "users", updatedUser.id), updatedUser, { merge: true });
         setStaff(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
         setIsModalOpen(false);
-        alert("✅ Colaborador atualizado!");
       } else {
-        // Criando novo usuário
         if (!formData.email || !formData.password) {
           setError("E-mail e senha são obrigatórios.");
           setLoading(false);
@@ -187,7 +129,6 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
           await setDoc(doc(db, "users", newUid), newUser);
           setStaff(prev => [...prev, newUser]);
           setIsModalOpen(false);
-          alert("✅ Colaborador criado com sucesso!");
         } catch (authError: any) {
           if (authError.code === 'auth/email-already-in-use') {
             setEmailConflict(true);
@@ -221,17 +162,13 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
           <h1 className="text-4xl font-black text-slate-800 tracking-tight uppercase">Colaboradores</h1>
           <p className="text-slate-400 font-bold uppercase text-xs tracking-[3px] mt-2">Gestão de Equipe e Permissões</p>
         </div>
-        <button 
-          onClick={() => handleOpenModal()} 
-          disabled={loading}
-          className="bg-slate-900 text-white px-8 py-5 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-blue-600 transition-all shadow-2xl flex items-center justify-center gap-3 disabled:opacity-50"
-        >
+        <button onClick={() => handleOpenModal()} className="bg-slate-900 text-white px-8 py-5 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-blue-600 transition-all shadow-2xl flex items-center justify-center gap-3">
           <Plus size={20} /> Novo Colaborador
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {staff.filter(member => member.role !== UserRole.ADMIN).map((member) => (
+        {staff.map((member) => (
           <div key={member.id} className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm hover:shadow-xl transition-all group relative">
             <div className="flex items-start justify-between mb-6">
               <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors overflow-hidden">
@@ -242,29 +179,11 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
                 )}
               </div>
               <div className="flex gap-2">
-                <button 
-                  onClick={() => handleOpenModal(member)} 
-                  disabled={loading}
-                  className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all disabled:opacity-50"
-                  title="Editar permissões"
-                >
+                <button onClick={() => handleOpenModal(member)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all">
                   <Shield size={18} />
                 </button>
-                <button 
-                  onClick={() => handleDelete(member.id, member.email)} 
-                  disabled={loading}
-                  className="p-3 bg-orange-50 text-orange-400 rounded-xl hover:bg-orange-500 hover:text-white transition-all disabled:opacity-50"
-                  title="Remover da lista (mantém no Auth)"
-                >
+                <button onClick={() => handleDelete(member.id)} className="p-3 bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all">
                   <Trash2 size={18} />
-                </button>
-                <button 
-                  onClick={() => handleDeleteCompletely(member.id, member.email)} 
-                  disabled={loading}
-                  className="p-3 bg-red-50 text-red-400 rounded-xl hover:bg-red-600 hover:text-white transition-all disabled:opacity-50"
-                  title="DELETAR PERMANENTEMENTE"
-                >
-                  <X size={18} />
                 </button>
               </div>
             </div>
@@ -298,8 +217,7 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
                   <button 
                     type="button"
                     onClick={handleRestoreConflict}
-                    disabled={loading}
-                    className="flex items-center justify-center gap-2 bg-amber-600 text-white py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-700 transition-all disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 bg-amber-600 text-white py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-700 transition-all"
                   >
                     <RefreshCw size={14} /> Reativar Acesso para este E-mail
                   </button>
@@ -343,7 +261,7 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
               </div>
             </div>
 
-            <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-5 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 hover:bg-blue-700 transition-all disabled:opacity-50">
+            <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-5 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 hover:bg-blue-700 transition-all">
               {loading ? <Loader2 className="animate-spin" size={20}/> : editingUser ? '💾 Atualizar Colaborador' : '✨ Criar Acesso'}
             </button>
           </form>
