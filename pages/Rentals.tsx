@@ -386,14 +386,14 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
         </div>
       </header>
 
-      <div id="rentals-report-print" className="hidden bg-white p-12 text-slate-900">
-          <div className="border-b-4 border-slate-900 pb-10 mb-10 flex justify-between items-end">
+      <div id="rentals-report-print" className="hidden bg-white p-8 text-slate-900">
+          <div className="border-b-4 border-slate-900 pb-6 mb-6 flex justify-between items-end">
               <div className="flex items-center gap-6">
-                  <div className="w-24 h-24 rounded-[28px] overflow-hidden border-2 border-slate-900">
+                  <div className="w-20 h-20 rounded-[28px] overflow-hidden border-2 border-slate-900">
                       {user?.profilePhotoUrl ? <img src={user.profilePhotoUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-100"/>}
                   </div>
                   <div>
-                      <h1 className="text-4xl font-black uppercase tracking-tighter">Relatório de Eventos</h1>
+                      <h1 className="text-3xl font-black uppercase tracking-tighter">Relatório de Eventos</h1>
                       <p className="text-base font-bold text-blue-600 uppercase tracking-widest mt-2">
                         {viewTab === 'Mês' ? currentDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }) : 'Ano ' + currentDate.getFullYear()}
                       </p>
@@ -405,32 +405,32 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
               </div>
           </div>
 
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-base text-left border-collapse">
               <thead>
-                  <tr className="border-b-2 border-slate-900 text-xs font-black uppercase tracking-wider">
-                      <th className="py-4 px-2">Data/Hora</th>
-                      <th className="py-4 px-2">Cliente</th>
-                      <th className="py-4 px-2">Itens</th>
-                      <th className="py-4 px-2">Local</th>
-                      <th className="py-4 px-2 text-right">Total</th>
-                      <th className="py-4 px-2 text-center">Status</th>
+                  <tr className="border-b-2 border-slate-900 font-black uppercase tracking-wider">
+                      <th className="py-2 px-2">Data/Hora</th>
+                      <th className="py-2 px-2">Cliente</th>
+                      <th className="py-2 px-2">Itens</th>
+                      <th className="py-2 px-2">Local</th>
+                      <th className="py-2 px-2 text-right">Total</th>
+                      <th className="py-2 px-2 text-center">Status</th>
                   </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                   {filteredRentals.map(r => (
-                      <tr key={r.id} className="text-sm">
-                          <td className="py-4 px-2 font-bold whitespace-nowrap">
+                      <tr key={r.id}>
+                          <td className="py-2 px-2 font-bold whitespace-nowrap">
                               {new Date(r.date + 'T00:00:00').toLocaleDateString('pt-BR')}<br/>
-                              <span className="text-xs text-slate-400">{r.startTime}h - {r.endTime}h</span>
+                              <span className="text-sm text-slate-400">{r.startTime}h - {r.endTime}h</span>
                           </td>
-                          <td className="py-4 px-2 font-black uppercase">{r.customerName}</td>
-                          <td className="py-4 px-2 text-xs">
+                          <td className="py-2 px-2 font-black uppercase">{r.customerName}</td>
+                          <td className="py-2 px-2">
                               {toys.filter(t => r.toyIds.includes(t.id)).map(t => t.name).join(', ')}
                               {r.additionalService && <><br/><span className="text-blue-600">+ {r.additionalService}</span></>}
                           </td>
-                          <td className="py-4 px-2 text-xs leading-tight max-w-[150px]">{r.eventAddress}</td>
-                          <td className="py-4 px-2 text-right font-black">R$ {r.totalValue.toLocaleString('pt-BR')}</td>
-                          <td className="py-4 px-2 text-center">
+                          <td className="py-2 px-2 leading-tight max-w-[150px]">{r.eventAddress}</td>
+                          <td className="py-2 px-2 text-right font-black">R$ {r.totalValue.toLocaleString('pt-BR')}</td>
+                          <td className="py-2 px-2 text-center">
                               <span className={'px-2 py-1 rounded-lg text-xs font-black uppercase ' + (
                                   r.status === RentalStatus.COMPLETED ? 'bg-emerald-100 text-emerald-700' :
                                   r.status === RentalStatus.CONFIRMED ? 'bg-blue-100 text-blue-700' :
