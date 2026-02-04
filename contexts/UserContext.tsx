@@ -10,11 +10,7 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType>({ user: null, loading: true });
 
-export const useUser = () => {
-  const context = useContext(UserContext);
-  if (!context) throw new Error('useUser deve ser usado dentro de UserProvider');
-  return context;
-};
+export const useUser = () => useContext(UserContext);
 
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -24,15 +20,18 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const auth = getAuth();
     const db = getFirestore();
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
-        // Apenas observa o documento. Se o documento sumir, user vira null.
+        // Escuta o Firestore. Se deletar lá, docSnap existe vira false.
         const unsubUser = onSnapshot(doc(db, "users", firebaseUser.uid), (docSnap) => {
           if (docSnap.exists()) {
             setUser(docSnap.data() as User);
           } else {
-            setUser(null);
+            setUser(null); // Documento deletado, limpa o estado
           }
+          setLoading(false);
+        }, (error) => {
+          console.error("Erro no Contexto:", error);
           setLoading(false);
         });
         return () => unsubUser();
