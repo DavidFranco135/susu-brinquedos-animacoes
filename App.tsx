@@ -158,58 +158,30 @@ const AppContent: React.FC = () => {
   return (
     <Router>
       <Routes>
-        <Route path="/catalogo" element={<PublicCatalog />} />
+        <Route path="/login" element={!user.id ? <Login /> : <Navigate to="/" />} />
         
-        <Route path="/resumo/:id" element={<PublicRentalSummary rentals={rentals} toys={toys} company={company || {} as CompanyType} />} />
-        <Route path="*" element={
-          !user ? <Login company={company} /> : (
-            <Layout user={user} onLogout={() => signOut(auth)} onUpdateUser={handleUpdateUser}>
+        <Route path="/" element={
+          !user.id ? <Navigate to="/login" /> : (
+            <Layout user={user} onLogout={handleLogout}>
               <Routes>
-                <Route path="/" element={hasAccess('dashboard') ? <Dashboard rentals={rentals} toysCount={toys.length} transactions={transactions} /> : <Navigate to="/reservas" />} />
-                
-                <Route path="/reservas" element={hasAccess('rentals') ? <Rentals rentals={rentals} setRentals={(a: any) => { 
-                  const n = typeof a === 'function' ? a(rentals) : a; 
-                  n.forEach((r: Rental) => setDoc(doc(db, "rentals", r.id), r)); 
-                }} customers={customers} toys={toys} /> : <Navigate to="/" />} />
-                
-                <Route path="/brinquedos" element={hasAccess('toys') ? <Inventory 
-                  toys={toys} 
-                  setToys={(a: any) => { 
-                    const n = typeof a === 'function' ? a(toys) : a; 
-                    n.forEach((t: Toy) => setDoc(doc(db, "toys", t.id), t)); 
-                  }} 
-                  categories={categories} 
-                  setCategories={(c) => setDoc(doc(db, "settings", "categories"), { list: c })}
-                /> : <Navigate to="/reservas" />} />
-                
-                <Route path="/clientes" element={hasAccess('customers') ? <CustomersPage customers={customers} setCustomers={(a: any) => { 
-                  const n = typeof a === 'function' ? a(customers) : a; 
-                  n.forEach((c: Customer) => setDoc(doc(db, "customers", c.id), c)); 
-                }} /> : <Navigate to="/reservas" />} />
-                
-                <Route path="/orcamentos" element={hasAccess('budgets') ? <BudgetsPage rentals={rentals} setRentals={(a: any) => { 
-                  const n = typeof a === 'function' ? a(rentals) : a; 
-                  n.forEach((r: Rental) => setDoc(doc(db, "rentals", r.id), r)); 
-                }} customers={customers} toys={toys} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
-
-                <Route path="/disponibilidade" element={hasAccess('availability') || hasAccess('rentals') ? <Availability rentals={rentals} toys={toys} /> : <Navigate to="/reservas" />} />
-                
-                <Route path="/financeiro" element={hasAccess('financial') ? <Financial rentals={rentals} transactions={transactions} setTransactions={(a: any) => { 
-                  const n = typeof a === 'function' ? a(transactions) : a; 
-                  n.forEach((t: FinancialTransaction) => setDoc(doc(db, "transactions", t.id), t)); 
-                }} /> : <Navigate to="/reservas" />} />
-                
-                <Route path="/contratos" element={hasAccess('documents') ? <DocumentsPage type="contract" rentals={rentals} customers={customers} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
+                <Route index element={<Dashboard rentals={rentals} toys={toys} customers={customers} staff={staff} />} />
+                <Route path="/reservas" element={<Rentals rentals={rentals} setRentals={setRentals} toys={toys} customers={customers} />} />
+                <Route path="/disponibilidade" element={<Availability toys={toys} rentals={rentals} />} />
+                <Route path="/financeiro" element={hasAccess('financial') ? <Financial transactions={transactions} setTransactions={setTransactions} rentals={rentals} /> : <Navigate to="/reservas" />} />
+                <Route path="/clientes" element={hasAccess('customers') ? <CustomersPage customers={customers} setCustomers={setCustomers} /> : <Navigate to="/reservas" />} />
+                <Route path="/orcamentos" element={hasAccess('budgets') ? <BudgetsPage rentals={rentals} setRentals={setRentals} toys={toys} customers={customers} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
+                <Route path="/inventario" element={hasAccess('toys') ? <Inventory toys={toys} setToys={setToys} categories={categories} setCategories={setCategories} /> : <Navigate to="/reservas" />} />
                 <Route path="/recibos" element={hasAccess('documents') ? <DocumentsPage type="receipt" rentals={rentals} customers={customers} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
                 
-                <Route path="/colaboradores" element={user.role === UserRole.ADMIN ? <Staff staff={staff.filter(u => u.email !== 'admsusu@gmail.com')} setStaff={(a: any) => { 
-                  const n = typeof a === 'function' ? a(staff) : a; 
-                  if (n.length < staff.length) { 
-                    const r = staff.find(u => !n.find(nx => nx.id === u.id)); 
-                    if (r) deleteDoc(doc(db, "users", r.id)); 
-                  } 
-                  n.forEach((u: User) => setDoc(doc(db, "users", u.id), u)); 
-                }} /> : <Navigate to="/reservas" />} />
+                {/* ROTA CORRIGIDA ABAIXO */}
+                <Route path="/colaboradores" element={
+                  user.role === UserRole.ADMIN ? (
+                    <Staff 
+                      staff={staff.filter(u => u.email !== 'admsusu@gmail.com')} 
+                      setStaff={setStaff} 
+                    />
+                  ) : <Navigate to="/reservas" />
+                } />
 
                 <Route path="/configuracoes" element={user.role === UserRole.ADMIN ? <AppSettings company={company || {} as CompanyType} setCompany={handleUpdateCompany} user={user} onUpdateUser={handleUpdateUser} /> : <Navigate to="/reservas" />} />
                 
