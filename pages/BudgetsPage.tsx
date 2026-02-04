@@ -253,42 +253,42 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
                       <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Válido por 10 dias úteis</p>
                     </div>
                     <div className="md:text-right space-y-2 pt-4">
-                      <p className="font-black text-slate-900 text-xl">{company.name}</p>
-                      <p className="text-xs font-bold text-slate-500 max-w-[300px] md:ml-auto leading-relaxed">{company.address}</p>
-                      <p className="text-sm font-black text-blue-600">{company.phone} • {company.email}</p>
+                      <p className="font-black text-slate-900 text-2xl">{company.name}</p>
+                      <p className="text-sm font-bold text-slate-500 max-w-[300px] md:ml-auto leading-relaxed">{company.address}</p>
+                      <p className="text-base font-black text-blue-600">{company.phone} • {company.email}</p>
                     </div>
                  </div>
 
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-12 py-12">
                     <div className="p-8 bg-slate-50 rounded-[40px] border border-slate-100">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Cliente Solicitante</p>
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Cliente Solicitante</p>
                       <p className="font-black text-2xl text-slate-900 mb-2">{selectedRental.customerName}</p>
-                      <p className="text-sm text-slate-500 font-medium">Orçamento personalizado para seu evento.</p>
+                      <p className="text-base text-slate-500 font-medium">Orçamento personalizado para seu evento.</p>
                     </div>
                     <div className="p-8 bg-blue-50/50 rounded-[40px] border border-blue-100/50">
-                      <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-4">Data Estimada</p>
+                      <p className="text-xs font-black text-blue-400 uppercase tracking-widest mb-4">Data Estimada</p>
                       <p className="font-black text-2xl text-slate-900 mb-2">{new Date(selectedRental.date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
-                      <p className="text-sm text-slate-500 font-black uppercase tracking-tighter">{selectedRental.startTime}h às {selectedRental.endTime}h</p>
+                      <p className="text-base text-slate-500 font-black uppercase tracking-tighter">{selectedRental.startTime}h às {selectedRental.endTime}h</p>
                     </div>
                  </div>
 
                  <div className="space-y-6">
-                    <p className="text-[10px] font-black text-slate-400 uppercase border-b pb-3 tracking-widest">Especificação de Itens</p>
+                    <p className="text-xs font-black text-slate-400 uppercase border-b pb-3 tracking-widest">Especificação de Itens</p>
                     <table className="w-full text-left">
                       <thead>
-                        <tr className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                        <tr className="text-xs font-black text-slate-300 uppercase tracking-widest">
                           <th className="py-4">Descrição Atração (Tamanho)</th>
                           <th className="py-4">Período</th>
                           <th className="py-4 text-right">Investimento</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 text-sm">
+                      <tbody className="divide-y divide-slate-100 text-base">
                         {selectedRental.toyIds.map(tid => {
                           const toy = toys.find(t=>t.id===tid);
                           return (
                             <tr key={tid}>
                               <td className="py-6 font-black text-slate-900">{toy?.name} {toy?.size ? `(${toy.size})` : ''}</td>
-                              <td className="py-6 text-xs font-bold text-slate-400 uppercase">Período de Festa (4h)</td>
+                              <td className="py-6 text-sm font-bold text-slate-400 uppercase">Período de Festa (4h)</td>
                               <td className="py-6 text-right text-slate-900 font-black">R$ {(toy?.price || 0).toLocaleString('pt-BR')}</td>
                             </tr>
                           );
@@ -299,12 +299,12 @@ const BudgetsPage: React.FC<Props> = ({ rentals, customers, toys, company, setRe
 
                  <div className="mt-16 bg-slate-900 p-12 rounded-[50px] flex flex-col md:flex-row justify-between items-center text-white gap-10">
                     <div>
-                      <p className="text-xs font-black text-slate-500 uppercase tracking-[4px] mb-2">Total da Proposta</p>
+                      <p className="text-sm font-black text-slate-500 uppercase tracking-[4px] mb-2">Total da Proposta</p>
                       <p className="text-6xl font-black">R$ {(selectedRental.totalValue || 0).toLocaleString('pt-BR')}</p>
                     </div>
                     <div className="bg-white/5 p-8 rounded-[40px] border border-white/10 text-center md:text-left min-w-[280px]">
-                      <p className="text-[10px] font-black uppercase tracking-[2px] text-slate-400 mb-2">Formas de Pagamento</p>
-                      <p className="text-xs font-medium leading-relaxed opacity-80">Sinal de reserva: <strong>R$ {(selectedRental.entryValue || 0).toLocaleString('pt-BR')}</strong>. O restante deve ser liquidado na montagem dos brinquedos.</p>
+                      <p className="text-xs font-black uppercase tracking-[2px] text-slate-400 mb-2">Formas de Pagamento</p>
+                      <p className="text-sm font-medium leading-relaxed opacity-80">Sinal de reserva: <strong>R$ {(selectedRental.entryValue || 0).toLocaleString('pt-BR')}</strong>. O restante deve ser liquidado na montagem dos brinquedos.</p>
                     </div>
                  </div>
               </div>
