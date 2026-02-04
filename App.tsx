@@ -4,6 +4,7 @@ import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
+  onAuthStateChanged, 
   signOut 
 } from "firebase/auth";
 import { 
@@ -17,7 +18,6 @@ import {
   deleteDoc
 } from "firebase/firestore";
 
-import { UserProvider, useUser } from './contexts/UserContext';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Inventory from './pages/Inventory';
@@ -30,7 +30,7 @@ import CustomersPage from './pages/CustomersPage';
 import BudgetsPage from './pages/BudgetsPage';
 import DocumentsPage from './pages/DocumentsPage';
 import PublicRentalSummary from './pages/PublicRentalSummary';
-import PublicCatalog from './PublicCatalog';
+import PublicCatalog from './PublicCatalog'; // ← NOVO IMPORT
 import { Customer, Toy, Rental, User, UserRole, FinancialTransaction, CompanySettings as CompanyType } from './types';
 import { User as UserIcon, Loader2, ExternalLink } from 'lucide-react';
 
@@ -48,7 +48,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// COMPONENTE DE LOGIN
+// COMPONENTE DE LOGIN COM FUNDO PERSONALIZADO + BOTÃO CATÁLOGO
 const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -95,6 +95,7 @@ const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
           </button>
         </form>
         
+        {/* ← NOVO BOTÃO PARA ACESSAR O CATÁLOGO PÚBLICO */}
         <div className="w-full mt-6 pt-6 border-t border-slate-200">
           <a 
             href="#/catalogo" 
@@ -108,9 +109,9 @@ const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
   );
 };
 
-// COMPONENTE PRINCIPAL QUE USA O CONTEXT
-const AppContent: React.FC = () => {
-  const { user, loading: userLoading } = useUser();
+const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [initializing, setInitializing] = useState(true);
   const [toys, setToys] = useState<Toy[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [rentals, setRentals] = useState<Rental[]>([]);
@@ -118,6 +119,36 @@ const AppContent: React.FC = () => {
   const [staff, setStaff] = useState<User[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [company, setCompany] = useState<CompanyType | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        // Monitoramento em tempo real do documento do utilizador
+        const unsubUser = onSnapshot(doc(db, "users", firebaseUser.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            setUser(docSnap.data() as User);
+          } else {
+            // Criação inicial se o documento não existir
+            const newUser: User = {
+              id: firebaseUser.uid,
+              name: firebaseUser.email?.split('@')[0] || 'Usuário',
+              email: firebaseUser.email || '',
+              role: firebaseUser.email === 'admsusu@gmail.com' ? UserRole.ADMIN : UserRole.EMPLOYEE,
+              allowedPages: []
+            };
+            setDoc(doc(db, "users", firebaseUser.uid), newUser);
+            setUser(newUser);
+          }
+          setInitializing(false);
+        });
+        return () => unsubUser();
+      } else {
+        setUser(null);
+        setInitializing(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     // Carrega dados da empresa mesmo deslogado para o Login
@@ -137,10 +168,12 @@ const AppContent: React.FC = () => {
     return () => { unsubToys(); unsubCustomers(); unsubRentals(); unsubFinancial(); unsubCompany(); unsubStaff(); unsubCategories(); };
   }, [user]);
 
+  // CORREÇÃO DEFINITIVA DA FOTO DE PERFIL
   const handleUpdateUser = async (updatedUser: User) => {
     if (updatedUser.id) {
       try {
         await setDoc(doc(db, "users", updatedUser.id), updatedUser, { merge: true });
+        setUser(updatedUser); // Atualiza localmente para resposta imediata
       } catch (e) {
         console.error("Erro ao salvar perfil:", e);
       }
@@ -151,13 +184,15 @@ const AppContent: React.FC = () => {
     await setDoc(doc(db, "settings", "company"), updatedCompany);
   };
 
-  if (userLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
+  if (initializing) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
 
+  // Função para verificar acesso (Admin ignora travas, Colaborador verifica array)
   const hasAccess = (pageId: string) => user?.role === UserRole.ADMIN || user?.allowedPages?.includes(pageId);
 
   return (
     <Router>
       <Routes>
+        {/* ← NOVA ROTA PÚBLICA DO CATÁLOGO */}
         <Route path="/catalogo" element={<PublicCatalog />} />
         
         <Route path="/resumo/:id" element={<PublicRentalSummary rentals={rentals} toys={toys} company={company || {} as CompanyType} />} />
@@ -172,15 +207,10 @@ const AppContent: React.FC = () => {
                   n.forEach((r: Rental) => setDoc(doc(db, "rentals", r.id), r)); 
                 }} customers={customers} toys={toys} /> : <Navigate to="/" />} />
                 
-                <Route path="/brinquedos" element={hasAccess('toys') ? <Inventory 
-                  toys={toys} 
-                  setToys={(a: any) => { 
-                    const n = typeof a === 'function' ? a(toys) : a; 
-                    n.forEach((t: Toy) => setDoc(doc(db, "toys", t.id), t)); 
-                  }} 
-                  categories={categories} 
-                  setCategories={(c) => setDoc(doc(db, "settings", "categories"), { list: c })}
-                /> : <Navigate to="/reservas" />} />
+                <Route path="/brinquedos" element={hasAccess('toys') ? <Inventory toys={toys} setToys={(a: any) => { 
+                  const n = typeof a === 'function' ? a(toys) : a; 
+                  n.forEach((t: Toy) => setDoc(doc(db, "toys", t.id), t)); 
+                }} categories={categories} setCategories={(c) => setDoc(doc(db, "settings", "categories"), { list: c })} /> : <Navigate to="/reservas" />} />
                 
                 <Route path="/clientes" element={hasAccess('customers') ? <CustomersPage customers={customers} setCustomers={(a: any) => { 
                   const n = typeof a === 'function' ? a(customers) : a; 
@@ -220,15 +250,6 @@ const AppContent: React.FC = () => {
         } />
       </Routes>
     </Router>
-  );
-};
-
-// COMPONENTE WRAPPER COM O PROVIDER
-const App: React.FC = () => {
-  return (
-    <UserProvider>
-      <AppContent />
-    </UserProvider>
   );
 };
 
