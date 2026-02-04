@@ -174,37 +174,37 @@ const CustomersPage: React.FC<Props> = ({ customers, setCustomers }) => {
         </div>
       </header>
 
-      <div id="print-area-customers" style={{ display: 'none' }} className="bg-white p-12 text-slate-900">
-          <div className="border-b-4 border-slate-900 pb-8 mb-8 flex justify-between items-center">
+      <div id="print-area-customers" style={{ display: 'none' }} className="bg-white p-8 text-slate-900">
+          <div className="border-b-4 border-slate-900 pb-6 mb-6 flex justify-between items-center">
               <div>
-                  <h1 className="text-4xl font-black uppercase tracking-tight">Listagem Geral de Clientes</h1>
+                  <h1 className="text-3xl font-black uppercase tracking-tight">Listagem Geral de Clientes</h1>
                   <p className="text-base font-bold mt-2 uppercase tracking-widest opacity-60">SUSU Animações e Brinquedos</p>
               </div>
-              <div className="w-24 h-24 rounded-[28px] overflow-hidden border-2 border-slate-900">
+              <div className="w-20 h-20 rounded-[28px] overflow-hidden border-2 border-slate-900">
                   {user?.profilePhotoUrl ? <img src={user.profilePhotoUrl} className="w-full h-full object-cover" alt="Logo" /> : <div className="w-full h-full bg-slate-100"/>}
               </div>
           </div>
-          <table className="w-full text-sm text-left border-collapse">
+          <table className="w-full text-base text-left border-collapse">
               <thead>
                   <tr className="border-b-2 border-slate-900 uppercase font-black">
-                      <th className="py-3 px-2">Nome / Razão</th>
-                      <th className="py-3 px-2">WhatsApp</th>
-                      <th className="py-3 px-2">Documento</th>
-                      <th className="py-3 px-2">Endereço Principal</th>
+                      <th className="py-2 px-2">Nome / Razão</th>
+                      <th className="py-2 px-2">WhatsApp</th>
+                      <th className="py-2 px-2">Documento</th>
+                      <th className="py-2 px-2">Endereço Principal</th>
                   </tr>
               </thead>
               <tbody className="divide-y">
                   {filtered.map(c => (
                       <tr key={c.id}>
-                          <td className="py-3 px-2 font-black text-slate-900">{c.name}</td>
-                          <td className="py-3 px-2 font-bold">{c.phone}</td>
-                          <td className="py-3 px-2 uppercase opacity-60 text-xs">{c.isCompany ? c.cnpj : c.cpf}</td>
-                          <td className="py-3 px-2 text-xs leading-tight">{c.address}</td>
+                          <td className="py-2 px-2 font-black text-slate-900">{c.name}</td>
+                          <td className="py-2 px-2 font-bold">{c.phone}</td>
+                          <td className="py-2 px-2 uppercase opacity-60">{c.isCompany ? c.cnpj : c.cpf}</td>
+                          <td className="py-2 px-2 leading-tight">{c.address}</td>
                       </tr>
                   ))}
               </tbody>
           </table>
-          <div className="mt-10 border-t pt-4 text-xs font-black uppercase opacity-40 text-center">
+          <div className="mt-6 border-t pt-3 text-xs font-black uppercase opacity-40 text-center">
               Gerado por {user?.name} em {new Date().toLocaleDateString('pt-BR')}
           </div>
       </div>
