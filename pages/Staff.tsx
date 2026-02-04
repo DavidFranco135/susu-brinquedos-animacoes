@@ -267,7 +267,7 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
                 </button>
                 <button 
                   onClick={() => handleDelete(member.id, member.email)} 
-                  disabled={loading}
+                  
                   className="p-3 bg-orange-50 text-orange-400 rounded-xl hover:bg-orange-500 hover:text-white transition-all disabled:opacity-50"
                   title="Remover da lista (mantém no Auth)"
                 >
