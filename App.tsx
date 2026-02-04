@@ -15,7 +15,7 @@ import {
   query,
   orderBy,
   deleteDoc,
-  getDocs  // ✅ NOVO: para buscar sem listener
+  getDocs
 } from "firebase/firestore";
 
 import { UserProvider, useUser } from './contexts/UserContext';
@@ -33,7 +33,7 @@ import DocumentsPage from './pages/DocumentsPage';
 import PublicRentalSummary from './pages/PublicRentalSummary';
 import PublicCatalog from './PublicCatalog';
 import { Customer, Toy, Rental, User, UserRole, FinancialTransaction, CompanySettings as CompanyType } from './types';
-import { User as UserIcon, Loader2, ExternalLink } from 'lucide-react';
+import { User as UserIcon, Loader2, ExternalLink, AlertTriangle, Shield, Trash2, RefreshCw } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBUvwY-e7h0KZyFJv7n0ignpzlMUGJIurU",
@@ -48,6 +48,215 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// ============================================
+// 🚨 COMPONENTE DE EMERGÊNCIA - RESTAURAR ADMIN
+// ============================================
+const EmergencyAdminRestore: React.FC = () => {
+  const [loading, setLoading] = useState(false);
+  const [log, setLog] = useState<string[]>([]);
+  const [isVisible, setIsVisible] = useState(true);
+
+  const addLog = (message: string) => {
+    setLog(prev => [...prev, `${new Date().toLocaleTimeString()} - ${message}`]);
+    console.log(message);
+  };
+
+  // 🔧 FUNÇÃO 1: RESTAURAR ADMIN
+  const restaurarAdmin = async () => {
+    if (!window.confirm("🚨 RESTAURAR ADMIN?\n\nIsso vai:\n✓ Definir admsusu@gmail.com como admin\n✓ Dar permissões de ADMIN para a conta atual\n\nContinuar?")) {
+      return;
+    }
+
+    setLoading(true);
+    setLog([]);
+
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        alert("❌ Faça login primeiro!");
+        setLoading(false);
+        return;
+      }
+
+      addLog("1️⃣ Iniciando restauração...");
+      
+      // 1. Atualiza settings/admin
+      addLog("2️⃣ Configurando email admin: admsusu@gmail.com");
+      await setDoc(doc(db, "settings", "admin"), { 
+        email: "admsusu@gmail.com" 
+      });
+      
+      // 2. Atualiza o usuário atual para ADMIN
+      addLog(`3️⃣ Promovendo usuário ${currentUser.email} (${currentUser.uid}) para ADMIN`);
+      await setDoc(doc(db, "users", currentUser.uid), {
+        id: currentUser.uid,
+        name: "Administrador",
+        email: currentUser.email || "admsusu@gmail.com",
+        role: "ADMIN",
+        allowedPages: [],
+        profilePhotoUrl: ""
+      }, { merge: true });
+
+      addLog("✅ ADMIN RESTAURADO COM SUCESSO!");
+      addLog("📝 PRÓXIMOS PASSOS:");
+      addLog("   1. Faça LOGOUT");
+      addLog("   2. Faça LOGIN com: admsusu@gmail.com");
+      addLog("   3. Você terá acesso total de ADMIN");
+      
+      alert("✅ Admin restaurado!\n\n1. Faça LOGOUT\n2. LOGIN com admsusu@gmail.com\n3. Você será reconhecido como ADMIN");
+
+    } catch (error: any) {
+      addLog(`❌ ERRO: ${error.message}`);
+      alert("❌ Erro: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🗑️ FUNÇÃO 2: LIMPAR TODOS OS COLABORADORES DO FIRESTORE
+  const limparColaboradores = async () => {
+    if (!window.confirm("⚠️ ATENÇÃO!\n\nIsso vai DELETAR todos os documentos da coleção 'users' no Firestore.\n\nVocê terá que excluir manualmente do Firebase Auth depois.\n\nContinuar?")) {
+      return;
+    }
+
+    setLoading(true);
+    setLog([]);
+
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        alert("❌ Faça login primeiro!");
+        setLoading(false);
+        return;
+      }
+
+      addLog("1️⃣ Buscando todos os usuários no Firestore...");
+      const usersSnap = await getDocs(collection(db, "users"));
+      
+      addLog(`2️⃣ Encontrados ${usersSnap.size} usuários`);
+      
+      let deletados = 0;
+      for (const userDoc of usersSnap.docs) {
+        const userData = userDoc.data();
+        
+        // NÃO deleta o usuário atual (você)
+        if (userDoc.id === currentUser.uid) {
+          addLog(`⏭️ Pulando usuário atual: ${userData.email}`);
+          continue;
+        }
+        
+        addLog(`🗑️ Deletando: ${userData.email} (${userDoc.id})`);
+        await deleteDoc(doc(db, "users", userDoc.id));
+        deletados++;
+      }
+
+      addLog(`✅ ${deletados} usuários deletados do Firestore!`);
+      addLog("\n⚠️ IMPORTANTE:");
+      addLog("Os emails ainda existem no Firebase Auth!");
+      addLog("Para deletar do Auth, vá em:");
+      addLog("Firebase Console → Authentication → Users");
+      addLog("E delete manualmente cada email.");
+      
+      alert(`✅ ${deletados} usuários removidos do Firestore!\n\n⚠️ Para deletar do Firebase Auth:\n1. Acesse Firebase Console\n2. Authentication → Users\n3. Delete manualmente`);
+
+    } catch (error: any) {
+      addLog(`❌ ERRO: ${error.message}`);
+      alert("❌ Erro: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 📋 FUNÇÃO 3: LISTAR TODOS OS USUÁRIOS
+  const listarUsuarios = async () => {
+    setLoading(true);
+    setLog([]);
+
+    try {
+      addLog("📋 Listando todos os usuários...");
+      const usersSnap = await getDocs(collection(db, "users"));
+      
+      addLog(`\n📊 Total: ${usersSnap.size} usuários\n`);
+      
+      usersSnap.forEach((userDoc) => {
+        const userData = userDoc.data();
+        addLog(`👤 ${userData.email || 'Sem email'}`);
+        addLog(`   ├─ UID: ${userDoc.id}`);
+        addLog(`   ├─ Nome: ${userData.name || 'Sem nome'}`);
+        addLog(`   ├─ Role: ${userData.role || 'Sem role'}`);
+        addLog(`   └─ Páginas: ${userData.allowedPages?.length || 0}`);
+        addLog("");
+      });
+
+    } catch (error: any) {
+      addLog(`❌ ERRO: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isVisible) return null;
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50 bg-red-600 text-white p-6 rounded-3xl shadow-2xl max-w-md">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <AlertTriangle size={24} className="animate-pulse" />
+          <h3 className="font-black text-lg uppercase">Emergência</h3>
+        </div>
+        <button
+          onClick={() => setIsVisible(false)}
+          className="text-white/70 hover:text-white text-2xl leading-none"
+          title="Fechar"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="space-y-3 mb-4">
+        <button
+          onClick={restaurarAdmin}
+          disabled={loading}
+          className="w-full bg-white text-red-600 px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-red-50 transition-all disabled:opacity-50"
+        >
+          <Shield size={16} />
+          {loading ? "Processando..." : "1. RESTAURAR ADMIN"}
+        </button>
+
+        <button
+          onClick={listarUsuarios}
+          disabled={loading}
+          className="w-full bg-white text-blue-600 px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-50 transition-all disabled:opacity-50"
+        >
+          <RefreshCw size={16} />
+          {loading ? "Processando..." : "2. Listar Usuários"}
+        </button>
+
+        <button
+          onClick={limparColaboradores}
+          disabled={loading}
+          className="w-full bg-white text-orange-600 px-4 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-orange-50 transition-all disabled:opacity-50"
+        >
+          <Trash2 size={16} />
+          {loading ? "Processando..." : "3. Limpar Colaboradores"}
+        </button>
+      </div>
+
+      {log.length > 0 && (
+        <div className="bg-black/20 rounded-xl p-4 max-h-64 overflow-y-auto font-mono text-xs">
+          {log.map((line, i) => (
+            <div key={i}>{line}</div>
+          ))}
+        </div>
+      )}
+
+      <p className="text-[10px] mt-4 opacity-70">
+        ⚠️ Use apenas em emergências! Feche este painel depois de usar.
+      </p>
+    </div>
+  );
+};
 
 // COMPONENTE DE LOGIN
 const Login: React.FC<{ company: CompanyType | null }> = ({ company }) => {
@@ -132,42 +341,11 @@ const AppContent: React.FC = () => {
     const unsubCustomers = onSnapshot(query(collection(db, "customers"), orderBy("name")), (snap) => setCustomers(snap.docs.map(d => ({ ...d.data(), id: d.id } as Customer))));
     const unsubRentals = onSnapshot(query(collection(db, "rentals"), orderBy("date", "desc")), (snap) => setRentals(snap.docs.map(d => ({ ...d.data(), id: d.id } as Rental))));
     const unsubFinancial = onSnapshot(query(collection(db, "transactions"), orderBy("date", "desc")), (snap) => setTransactions(snap.docs.map(d => ({ ...d.data(), id: d.id } as FinancialTransaction))));
-    
-    // ✅ REMOVIDO: onSnapshot de staff
-    // ❌ const unsubStaff = onSnapshot(collection(db, "users"), (snap) => setStaff(snap.docs.map(d => ({ ...d.data(), id: d.id } as User))));
-    
+    const unsubStaff = onSnapshot(collection(db, "users"), (snap) => setStaff(snap.docs.map(d => ({ ...d.data(), id: d.id } as User))));
     const unsubCategories = onSnapshot(doc(db, "settings", "categories"), (docSnap) => docSnap.exists() && setCategories(docSnap.data().list || []));
 
-    // ✅ NOVO: Carrega staff uma única vez, SEM listener
-    loadStaff();
-
-    return () => { 
-      unsubToys(); 
-      unsubCustomers(); 
-      unsubRentals(); 
-      unsubFinancial(); 
-      unsubCompany(); 
-      // ✅ Removido: unsubStaff()
-      unsubCategories(); 
-    };
+    return () => { unsubToys(); unsubCustomers(); unsubRentals(); unsubFinancial(); unsubCompany(); unsubStaff(); unsubCategories(); };
   }, [user]);
-
-  // ✅ NOVA FUNÇÃO: Carrega staff sem listener (só quando necessário)
-  const loadStaff = async () => {
-    try {
-      const staffSnapshot = await getDocs(collection(db, "users"));
-      const staffData = staffSnapshot.docs.map(d => ({ ...d.data(), id: d.id } as User));
-      console.log('📋 Staff carregado:', staffData.length, 'usuários');
-      setStaff(staffData);
-    } catch (error) {
-      console.error('Erro ao carregar staff:', error);
-    }
-  };
-
-  // ✅ NOVA FUNÇÃO: Recarrega staff manualmente
-  const refreshStaff = async () => {
-    await loadStaff();
-  };
 
   const handleUpdateUser = async (updatedUser: User) => {
     if (updatedUser.id) {
@@ -196,6 +374,9 @@ const AppContent: React.FC = () => {
         <Route path="*" element={
           !user ? <Login company={company} /> : (
             <Layout user={user} onLogout={() => signOut(auth)} onUpdateUser={handleUpdateUser}>
+              {/* 🚨 COMPONENTE DE EMERGÊNCIA - REMOVER DEPOIS DE USAR */}
+              <EmergencyAdminRestore />
+              
               <Routes>
                 <Route path="/" element={hasAccess('dashboard') ? <Dashboard rentals={rentals} toysCount={toys.length} transactions={transactions} /> : <Navigate to="/reservas" />} />
                 
@@ -234,21 +415,14 @@ const AppContent: React.FC = () => {
                 <Route path="/contratos" element={hasAccess('documents') ? <DocumentsPage type="contract" rentals={rentals} customers={customers} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
                 <Route path="/recibos" element={hasAccess('documents') ? <DocumentsPage type="receipt" rentals={rentals} customers={customers} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
                 
-                {/* ✅ MODIFICADO: Passa refreshStaff para atualizar manualmente */}
-                <Route path="/colaboradores" element={user.role === UserRole.ADMIN ? <Staff 
-                  staff={staff.filter(u => u.email !== 'admsusu@gmail.com')} 
-                  setStaff={(a: any) => { 
-                    const n = typeof a === 'function' ? a(staff) : a; 
-                    if (n.length < staff.length) { 
-                      const r = staff.find(u => !n.find(nx => nx.id === u.id)); 
-                      if (r) deleteDoc(doc(db, "users", r.id)); 
-                    } 
-                    n.forEach((u: User) => setDoc(doc(db, "users", u.id), u));
-                    // ✅ NOVO: Atualiza o estado e recarrega
-                    setStaff(n);
-                    setTimeout(refreshStaff, 500); // Recarrega após 500ms
-                  }} 
-                /> : <Navigate to="/reservas" />} />
+                <Route path="/colaboradores" element={user.role === UserRole.ADMIN ? <Staff staff={staff.filter(u => u.email !== 'admsusu@gmail.com')} setStaff={(a: any) => { 
+                  const n = typeof a === 'function' ? a(staff) : a; 
+                  if (n.length < staff.length) { 
+                    const r = staff.find(u => !n.find(nx => nx.id === u.id)); 
+                    if (r) deleteDoc(doc(db, "users", r.id)); 
+                  } 
+                  n.forEach((u: User) => setDoc(doc(db, "users", u.id), u)); 
+                }} /> : <Navigate to="/reservas" />} />
 
                 <Route path="/configuracoes" element={user.role === UserRole.ADMIN ? <AppSettings company={company || {} as CompanyType} setCompany={handleUpdateCompany} user={user} onUpdateUser={handleUpdateUser} /> : <Navigate to="/reservas" />} />
                 
