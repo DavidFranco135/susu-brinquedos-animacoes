@@ -14,8 +14,7 @@ import {
   setDoc, 
   query,
   orderBy,
-  deleteDoc,
-  getDocs  // ✅ NOVO: para buscar sem listener
+  deleteDoc
 } from "firebase/firestore";
 
 import { UserProvider, useUser } from './contexts/UserContext';
@@ -132,42 +131,11 @@ const AppContent: React.FC = () => {
     const unsubCustomers = onSnapshot(query(collection(db, "customers"), orderBy("name")), (snap) => setCustomers(snap.docs.map(d => ({ ...d.data(), id: d.id } as Customer))));
     const unsubRentals = onSnapshot(query(collection(db, "rentals"), orderBy("date", "desc")), (snap) => setRentals(snap.docs.map(d => ({ ...d.data(), id: d.id } as Rental))));
     const unsubFinancial = onSnapshot(query(collection(db, "transactions"), orderBy("date", "desc")), (snap) => setTransactions(snap.docs.map(d => ({ ...d.data(), id: d.id } as FinancialTransaction))));
-    
-    // ✅ REMOVIDO: onSnapshot de staff
-    // ❌ const unsubStaff = onSnapshot(collection(db, "users"), (snap) => setStaff(snap.docs.map(d => ({ ...d.data(), id: d.id } as User))));
-    
+    const unsubStaff = onSnapshot(collection(db, "users"), (snap) => setStaff(snap.docs.map(d => ({ ...d.data(), id: d.id } as User))));
     const unsubCategories = onSnapshot(doc(db, "settings", "categories"), (docSnap) => docSnap.exists() && setCategories(docSnap.data().list || []));
 
-    // ✅ NOVO: Carrega staff uma única vez, SEM listener
-    loadStaff();
-
-    return () => { 
-      unsubToys(); 
-      unsubCustomers(); 
-      unsubRentals(); 
-      unsubFinancial(); 
-      unsubCompany(); 
-      // ✅ Removido: unsubStaff()
-      unsubCategories(); 
-    };
+    return () => { unsubToys(); unsubCustomers(); unsubRentals(); unsubFinancial(); unsubCompany(); unsubStaff(); unsubCategories(); };
   }, [user]);
-
-  // ✅ NOVA FUNÇÃO: Carrega staff sem listener (só quando necessário)
-  const loadStaff = async () => {
-    try {
-      const staffSnapshot = await getDocs(collection(db, "users"));
-      const staffData = staffSnapshot.docs.map(d => ({ ...d.data(), id: d.id } as User));
-      console.log('📋 Staff carregado:', staffData.length, 'usuários');
-      setStaff(staffData);
-    } catch (error) {
-      console.error('Erro ao carregar staff:', error);
-    }
-  };
-
-  // ✅ NOVA FUNÇÃO: Recarrega staff manualmente
-  const refreshStaff = async () => {
-    await loadStaff();
-  };
 
   const handleUpdateUser = async (updatedUser: User) => {
     if (updatedUser.id) {
@@ -234,21 +202,14 @@ const AppContent: React.FC = () => {
                 <Route path="/contratos" element={hasAccess('documents') ? <DocumentsPage type="contract" rentals={rentals} customers={customers} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
                 <Route path="/recibos" element={hasAccess('documents') ? <DocumentsPage type="receipt" rentals={rentals} customers={customers} company={company || {} as CompanyType} /> : <Navigate to="/reservas" />} />
                 
-                {/* ✅ MODIFICADO: Passa refreshStaff para atualizar manualmente */}
-                <Route path="/colaboradores" element={user.role === UserRole.ADMIN ? <Staff 
-                  staff={staff.filter(u => u.email !== 'admsusu@gmail.com')} 
-                  setStaff={(a: any) => { 
-                    const n = typeof a === 'function' ? a(staff) : a; 
-                    if (n.length < staff.length) { 
-                      const r = staff.find(u => !n.find(nx => nx.id === u.id)); 
-                      if (r) deleteDoc(doc(db, "users", r.id)); 
-                    } 
-                    n.forEach((u: User) => setDoc(doc(db, "users", u.id), u));
-                    // ✅ NOVO: Atualiza o estado e recarrega
-                    setStaff(n);
-                    setTimeout(refreshStaff, 500); // Recarrega após 500ms
-                  }} 
-                /> : <Navigate to="/reservas" />} />
+                <Route path="/colaboradores" element={user.role === UserRole.ADMIN ? <Staff staff={staff.filter(u => u.email !== 'admsusu@gmail.com')} setStaff={(a: any) => { 
+                  const n = typeof a === 'function' ? a(staff) : a; 
+                  if (n.length < staff.length) { 
+                    const r = staff.find(u => !n.find(nx => nx.id === u.id)); 
+                    if (r) deleteDoc(doc(db, "users", r.id)); 
+                  } 
+                  n.forEach((u: User) => setDoc(doc(db, "users", u.id), u)); 
+                }} /> : <Navigate to="/reservas" />} />
 
                 <Route path="/configuracoes" element={user.role === UserRole.ADMIN ? <AppSettings company={company || {} as CompanyType} setCompany={handleUpdateCompany} user={user} onUpdateUser={handleUpdateUser} /> : <Navigate to="/reservas" />} />
                 
