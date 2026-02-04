@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { UsersRound, Plus, ShieldCheck, Shield, Trash2, X, Lock, Eye, EyeOff, Check, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { User, UserRole } from '../types';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
-import { getFirestore, doc, setDoc, deleteDoc, getDoc } from "firebase/firestore";
+import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
+import { getFirestore, doc, setDoc, deleteDoc } from "firebase/firestore";
 
 interface Props {
   staff: User[];
@@ -26,221 +26,238 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [emailConflict, setEmailConflict] = useState(false);
-  
-  const [formData, setFormData] = useState<Partial<User & { password?: string }>>({
+
+  const [formData, setFormData] = useState<Partial<User>>({
     name: '',
     email: '',
     password: '',
-    role: UserRole.EMPLOYEE,
-    allowedPages: []
+    role: UserRole.STAFF,
+    allowedPages: ['rentals', 'customers']
   });
 
-  const auth = getAuth();
-  const db = getFirestore();
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      email: '',
+      password: '',
+      role: UserRole.STAFF,
+      allowedPages: ['rentals', 'customers']
+    });
+    setEditingUser(null);
+    setShowPassword(false);
+  };
 
-  const handleOpenModal = (user?: User) => {
-    setError(null);
-    setEmailConflict(false);
-    if (user) {
-      setEditingUser(user);
-      setFormData(user);
-    } else {
-      setEditingUser(null);
-      setFormData({ name: '', email: '', password: '', role: UserRole.EMPLOYEE, allowedPages: [] });
-    }
+  const handleEdit = (user: User) => {
+    setEditingUser(user);
+    setFormData(user);
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (userId: string) => {
-    if (window.confirm("Remover este colaborador da lista? O e-mail continuará no sistema de login, mas sem acesso às páginas.")) {
+  const handleDelete = async (id: string) => {
+    if (window.confirm('🚨 Tem certeza que deseja remover este acesso?\n\nIsso removerá os dados do colaborador. Para impedir o login definitivamente, remova também o e-mail no console do Firebase Authentication.')) {
+      setLoading(true);
       try {
-        await deleteDoc(doc(db, "users", userId));
-        setStaff(prev => prev.filter(u => u.id !== userId));
-      } catch (e) {
-        alert("Erro ao remover colaborador.");
+        const db = getFirestore();
+        // Deleta o documento no Firestore
+        await deleteDoc(doc(db, "users", id));
+        // O App.tsx atualizará a lista automaticamente via onSnapshot
+      } catch (error: any) {
+        console.error("Erro ao deletar:", error);
+        alert("Erro ao remover: " + error.message);
+      } finally {
+        setLoading(false);
       }
-    }
-  };
-
-  // FUNÇÃO PARA RESTAURAR UM E-MAIL QUE JÁ EXISTE NO AUTH MAS NÃO NO FIRESTORE
-  const handleRestoreConflict = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Tentamos simular um login para pegar o UID desse e-mail já existente
-      // Se você souber a senha que definiu antes, ele vincula na hora.
-      alert("Para vincular um e-mail já existente, o sistema tentará criar o perfil no banco de dados. Certifique-se que o nome e permissões estão preenchidos.");
-      
-      const tempId = `old_user_${Date.now()}`; // ID temporário se não conseguirmos o real
-      const newUser: User = {
-        id: tempId, // O ideal é o UID do Auth, mas no Firestore o e-mail é a chave de busca
-        name: formData.name || 'Colaborador Recuperado',
-        email: formData.email!,
-        role: UserRole.EMPLOYEE,
-        allowedPages: formData.allowedPages || [],
-        profilePhotoUrl: ''
-      };
-
-      await setDoc(doc(db, "users", newUser.id), newUser);
-      setStaff(prev => [...prev, newUser]);
-      setIsModalOpen(false);
-      alert("Perfil restaurado! Se o colaborador esqueceu a senha, ele deve usar a opção 'Esqueci minha senha' no login.");
-    } catch (e: any) {
-      setError("Não foi possível restaurar: " + e.message);
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
-    setEmailConflict(false);
+    const db = getFirestore();
 
     try {
       if (editingUser) {
-        const updatedUser = { ...editingUser, ...formData } as User;
-        await setDoc(doc(db, "users", updatedUser.id), updatedUser, { merge: true });
-        setStaff(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+        // Atualizar usuário existente
+        await setDoc(doc(db, "users", editingUser.id), formData);
         setIsModalOpen(false);
+        resetForm();
       } else {
-        if (!formData.email || !formData.password) {
-          setError("E-mail e senha são obrigatórios.");
-          setLoading(false);
-          return;
-        }
-
-        try {
-          const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-          const newUid = userCredential.user.uid;
-
-          const newUser: User = {
-            id: newUid,
-            name: formData.name || '',
-            email: formData.email,
-            role: UserRole.EMPLOYEE,
-            allowedPages: formData.allowedPages || [],
-            profilePhotoUrl: ''
-          };
-
-          await setDoc(doc(db, "users", newUid), newUser);
-          setStaff(prev => [...prev, newUser]);
-          setIsModalOpen(false);
-        } catch (authError: any) {
-          if (authError.code === 'auth/email-already-in-use') {
-            setEmailConflict(true);
-            setError("Este e-mail já está no sistema de login, mas não está na sua lista.");
-          } else {
-            throw authError;
-          }
-        }
+        // Criar novo usuário no Auth e Firestore
+        const auth = getAuth();
+        const userCredential = await createUserWithEmailAndPassword(auth, formData.email!, formData.password!);
+        const newUser = {
+          ...formData,
+          id: userCredential.user.uid,
+          password: '' // Não salvar senha no Firestore por segurança
+        };
+        await setDoc(doc(db, "users", userCredential.user.uid), newUser);
+        setIsModalOpen(false);
+        resetForm();
       }
-    } catch (err: any) {
-      setError("Erro: " + err.message);
+    } catch (error: any) {
+      alert("Erro na operação: " + error.message);
     } finally {
       setLoading(false);
     }
   };
 
   const togglePage = (pageId: string) => {
-    const currentPages = formData.allowedPages || [];
-    setFormData({
-      ...formData,
-      allowedPages: currentPages.includes(pageId)
-        ? currentPages.filter(id => id !== pageId)
-        : [...currentPages, pageId]
-    });
+    const current = formData.allowedPages || [];
+    const updated = current.includes(pageId)
+      ? current.filter(id => id !== pageId)
+      : [...current, pageId];
+    setFormData({ ...formData, allowedPages: updated });
   };
 
   return (
-    <div className="space-y-8 pb-20">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto pb-24 md:pb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-4xl font-black text-slate-800 tracking-tight uppercase">Colaboradores</h1>
-          <p className="text-slate-400 font-bold uppercase text-xs tracking-[3px] mt-2">Gestão de Equipe e Permissões</p>
+          <h1 className="text-3xl font-black text-slate-800 uppercase tracking-tighter flex items-center gap-3">
+            <UsersRound className="text-blue-600" size={32} />
+            Colaboradores
+          </h1>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1 ml-11">Gestão de Acessos</p>
         </div>
-        <button onClick={() => handleOpenModal()} className="bg-slate-900 text-white px-8 py-5 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-blue-600 transition-all shadow-2xl flex items-center justify-center gap-3">
-          <Plus size={20} /> Novo Colaborador
+        <button 
+          onClick={() => { resetForm(); setIsModalOpen(true); }}
+          className="bg-blue-600 text-white px-8 py-4 rounded-3xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+        >
+          <Plus size={18} /> Novo Acesso
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {staff.map((member) => (
-          <div key={member.id} className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm hover:shadow-xl transition-all group relative">
+        {staff.map((u) => (
+          <div key={u.id} className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
             <div className="flex items-start justify-between mb-6">
-              <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors overflow-hidden">
-                {member.profilePhotoUrl ? (
-                  <img src={member.profilePhotoUrl} className="w-full h-full object-cover" alt="" />
-                ) : (
-                  <UsersRound size={28} />
-                )}
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${u.role === UserRole.ADMIN ? 'bg-amber-50 text-amber-500' : 'bg-blue-50 text-blue-500'}`}>
+                {u.role === UserRole.ADMIN ? <ShieldCheck size={28} /> : <Shield size={28} />}
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => handleOpenModal(member)} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all">
-                  <Shield size={18} />
+              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                <button onClick={() => handleEdit(u)} className="p-3 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-xl transition-colors">
+                  <RefreshCw size={18} />
                 </button>
-                <button onClick={() => handleDelete(member.id)} className="p-3 bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all">
+                <button onClick={() => handleDelete(u.id)} className="p-3 bg-red-50 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-all">
                   <Trash2 size={18} />
                 </button>
               </div>
             </div>
-            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-1">{member.name}</h3>
-            <p className="text-slate-400 font-bold text-xs mb-6 lowercase">{member.email}</p>
-            <div className="flex flex-wrap gap-2">
-              {member.allowedPages?.map(pageId => (
-                <span key={pageId} className="px-3 py-1 bg-slate-50 text-slate-500 rounded-lg text-[10px] font-black uppercase tracking-wider">
-                  {AVAILABLE_PAGES.find(p => p.id === pageId)?.name}
-                </span>
-              ))}
+
+            <div className="space-y-1">
+              <h3 className="font-black text-slate-800 text-lg uppercase tracking-tight">{u.name}</h3>
+              <p className="text-slate-400 font-medium text-sm">{u.email}</p>
+            </div>
+
+            <div className="mt-6 pt-6 border-t border-slate-50 flex items-center justify-between">
+              <span className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-full ${u.role === UserRole.ADMIN ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
+                {u.role}
+              </span>
+              <div className="flex -space-x-2">
+                {u.allowedPages?.slice(0, 3).map(p => (
+                  <div key={p} className="w-8 h-8 rounded-full bg-slate-50 border-2 border-white flex items-center justify-center text-xs" title={p}>
+                    {AVAILABLE_PAGES.find(ap => ap.id === p)?.icon}
+                  </div>
+                ))}
+                {(u.allowedPages?.length || 0) > 3 && (
+                  <div className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-slate-400">
+                    +{(u.allowedPages?.length || 0) - 3}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ))}
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleSubmit} className="bg-white w-full max-w-2xl rounded-[48px] shadow-2xl p-10 space-y-8 max-h-[90vh] overflow-y-auto custom-scrollbar">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-black text-slate-800 uppercase">{editingUser ? 'Editar Permissões' : 'Novo Colaborador'}</h2>
-              <button type="button" onClick={() => setIsModalOpen(false)} className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-red-50 hover:text-red-500 transition-all"><X size={20}/></button>
-            </div>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <form onSubmit={handleSubmit} className="bg-white w-full max-w-2xl rounded-[48px] p-8 md:p-12 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <button type="button" onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 text-slate-300 hover:text-slate-500 transition-colors">
+              <X size={32} />
+            </button>
 
-            {error && (
-              <div className={`p-6 rounded-2xl flex flex-col gap-4 ${emailConflict ? 'bg-amber-50 border border-amber-200' : 'bg-red-50 text-red-600'}`}>
-                <div className="flex items-center gap-3 text-sm font-bold">
-                  <AlertCircle size={20} /> {error}
-                </div>
-                {emailConflict && (
-                  <button 
-                    type="button"
-                    onClick={handleRestoreConflict}
-                    className="flex items-center justify-center gap-2 bg-amber-600 text-white py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-700 transition-all"
-                  >
-                    <RefreshCw size={14} /> Reativar Acesso para este E-mail
-                  </button>
-                )}
-              </div>
-            )}
+            <div className="mb-10 text-center md:text-left">
+              <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">
+                {editingUser ? 'Editar Colaborador' : 'Novo Colaborador'}
+              </h2>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">Defina o nível de acesso e permissões</p>
+            </div>
 
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <input required placeholder="Nome Completo" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-                <input required type="email" placeholder="E-mail de Login" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} disabled={!!editingUser} />
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-4 tracking-widest">Nome Completo</label>
+                  <input
+                    required
+                    className="w-full px-8 py-5 bg-slate-50 rounded-3xl border-none focus:ring-4 focus:ring-blue-500/10 font-bold transition-all outline-none"
+                    value={formData.name}
+                    onChange={e => setFormData({...formData, name: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-4 tracking-widest">E-mail de Acesso</label>
+                  <input
+                    required
+                    type="email"
+                    disabled={!!editingUser}
+                    className="w-full px-8 py-5 bg-slate-50 rounded-3xl border-none focus:ring-4 focus:ring-blue-500/10 font-bold transition-all outline-none disabled:opacity-50"
+                    value={formData.email}
+                    onChange={e => setFormData({...formData, email: e.target.value})}
+                  />
+                </div>
               </div>
 
               {!editingUser && (
-                <div className="relative">
-                  <input required={!emailConflict} type={showPassword ? "text" : "password"} placeholder="Senha" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-6 top-4 text-slate-300">{showPassword ? <EyeOff size={20}/> : <Eye size={20}/>}</button>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-4 tracking-widest">Senha Provisória</label>
+                  <div className="relative">
+                    <input
+                      required
+                      type={showPassword ? 'text' : 'password'}
+                      className="w-full px-8 py-5 bg-slate-50 rounded-3xl border-none focus:ring-4 focus:ring-blue-500/10 font-bold transition-all outline-none"
+                      value={formData.password}
+                      onChange={e => setFormData({...formData, password: e.target.value})}
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300">
+                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
                 </div>
               )}
 
               <div className="space-y-4">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Páginas Autorizadas</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-4 tracking-widest">Nível de Poder</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({...formData, role: UserRole.STAFF})}
+                    className={`p-6 rounded-3xl border-2 transition-all text-left ${formData.role === UserRole.STAFF ? 'border-blue-600 bg-blue-50/50' : 'border-slate-50 bg-slate-50'}`}
+                  >
+                    <Shield size={24} className={formData.role === UserRole.STAFF ? 'text-blue-600' : 'text-slate-300'} />
+                    <div className="mt-3">
+                      <p className={`font-black text-xs uppercase ${formData.role === UserRole.STAFF ? 'text-blue-600' : 'text-slate-400'}`}>Colaborador</p>
+                      <p className="text-[9px] text-slate-400 mt-1 uppercase font-bold">Acesso restrito a páginas selecionadas</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormData({...formData, role: UserRole.ADMIN})}
+                    className={`p-6 rounded-3xl border-2 transition-all text-left ${formData.role === UserRole.ADMIN ? 'border-amber-500 bg-amber-50/50' : 'border-slate-50 bg-slate-50'}`}
+                  >
+                    <ShieldCheck size={24} className={formData.role === UserRole.ADMIN ? 'text-amber-500' : 'text-slate-300'} />
+                    <div className="mt-3">
+                      <p className={`font-black text-xs uppercase ${formData.role === UserRole.ADMIN ? 'text-amber-600' : 'text-slate-400'}`}>Administrador</p>
+                      <p className="text-[9px] text-slate-400 mt-1 uppercase font-bold">Acesso total a todas as funções</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <div className={`space-y-4 transition-all ${formData.role === UserRole.ADMIN ? 'opacity-30 pointer-events-none' : ''}`}>
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-4 tracking-widest">Permissões de Acesso</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {AVAILABLE_PAGES.map(page => (
                     <button
                       key={page.id}
@@ -261,7 +278,7 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
               </div>
             </div>
 
-            <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-5 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 hover:bg-blue-700 transition-all">
+            <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white mt-10 py-5 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 hover:bg-blue-700 transition-all disabled:opacity-50">
               {loading ? <Loader2 className="animate-spin" size={20}/> : editingUser ? '💾 Atualizar Colaborador' : '✨ Criar Acesso'}
             </button>
           </form>
