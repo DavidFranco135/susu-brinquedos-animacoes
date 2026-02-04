@@ -54,27 +54,42 @@ const Staff: React.FC<Props> = ({ staff, setStaff }) => {
   };
 
   // ✅ FUNÇÃO CORRIGIDA: Remove do Firestore (botão laranja)
-  const handleDelete = async (userId: string, userEmail: string) => {
-    if (!window.confirm(`⚠️ Remover ${userEmail} da lista?\n\nO email continuará podendo fazer login, mas sem permissões de acesso.`)) {
-      return;
-    }
-
-    setLoading(true);
+ const handleDelete = async (userId: string, userEmail: string) => {
+  if (window.confirm(`DELETAR PERMANENTEMENTE o colaborador?\n\nEmail: ${userEmail}\n\nEsta ação é IRREVERSÍVEL!`)) {
     try {
+      console.log('🗑️ Iniciando exclusão do usuário:', userId, userEmail);
+      
       // 1. Deleta do Firestore
       await deleteDoc(doc(db, "users", userId));
+      console.log('✅ Documento deletado do Firestore');
       
-      // 2. Atualiza o estado local imediatamente
-      setStaff(prev => prev.filter(u => u.id !== userId));
+      // 2. Remove do estado local
+      setStaff(prev => {
+        const newStaff = prev.filter(u => u.id !== userId);
+        console.log('✅ Removido do estado local');
+        return newStaff;
+      });
       
-      alert("✅ Colaborador removido da lista!");
+      // 3. Verifica se realmente foi deletado
+      setTimeout(async () => {
+        const verifyDoc = await getDoc(doc(db, "users", userId));
+        if (verifyDoc.exists()) {
+          console.error('❌ ERRO: Documento ainda existe!');
+          // Tenta deletar novamente
+          await deleteDoc(doc(db, "users", userId));
+          console.log('🔄 Tentativa de exclusão repetida');
+        } else {
+          console.log('✅ Confirmado: Usuário deletado permanentemente');
+          alert('✅ Usuário deletado com sucesso!');
+        }
+      }, 1000);
+      
     } catch (e: any) {
-      console.error("Erro ao remover:", e);
-      alert("❌ Erro ao remover colaborador: " + e.message);
-    } finally {
-      setLoading(false);
+      console.error('❌ Erro ao remover colaborador:', e);
+      alert(`Erro ao remover colaborador: ${e.message}`);
     }
-  };
+  }
+};
 
   // ✅ FUNÇÃO NOVA: Deleta completamente (botão vermelho)
   const handleDeleteCompletely = async (userId: string, userEmail: string) => {
