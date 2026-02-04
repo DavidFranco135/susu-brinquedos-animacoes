@@ -1,8 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Save, Upload, CloudUpload, CheckCircle, User as UserIcon, Lock, Key, Mail, ShieldCheck, Phone, Image as ImageIcon } from 'lucide-react';
+import { Save, Upload, CloudUpload, CheckCircle, User as UserIcon, Lock, Key, Mail, ShieldCheck, Phone, Image as ImageIcon, FileText } from 'lucide-react';
 import { CompanySettings, User, UserRole } from '../types';
-import { auth } from '../firebase';
-import { updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential, signOut, createUserWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential, signOut, createUserWithEmailAndPassword } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 
 interface Props {
@@ -29,6 +28,7 @@ const AppSettings: React.FC<Props> = ({ company, setCompany, user, onUpdateUser 
   const profileInputRef = useRef<HTMLInputElement>(null);
   const loginInputRef = useRef<HTMLInputElement>(null);
 
+  const auth = getAuth();
   const db = getFirestore();
 
   // Função genérica para processar imagem para Base64
@@ -55,7 +55,7 @@ const AppSettings: React.FC<Props> = ({ company, setCompany, user, onUpdateUser 
     setIsSaving(true);
     
     try {
-      // 1. Salva os dados da empresa (incluindo logo e fundo de login)
+      // 1. Salva os dados da empresa (incluindo logo, cnpj e fundo de login)
       await setCompany(companyData);
       
       // 2. Salva os dados do usuário (agora salva a foto de perfil no Firebase)
@@ -71,9 +71,11 @@ const AppSettings: React.FC<Props> = ({ company, setCompany, user, onUpdateUser 
     }
   };
 
-  // ✅ FUNÇÃO ATUALIZADA: Alterar Email com transferência COMPLETA de permissões de ADMIN
+  // ✅ FUNÇÃO CORRIGIDA: Alterar Email com transferência COMPLETA de permissões de ADMIN
   const handleChangeCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    console.log("🔍 Iniciando processo de transferência...");
     
     if (!currentPassword) {
       alert("Por favor, digite sua senha atual para confirmar a alteração.");
@@ -106,8 +108,11 @@ const AppSettings: React.FC<Props> = ({ company, setCompany, user, onUpdateUser 
 
     try {
       const currentUser = auth.currentUser;
+      
+      console.log("👤 Usuário atual:", currentUser?.email);
+      
       if (!currentUser || !currentUser.email) {
-        alert("Usuário não autenticado.");
+        alert("❌ Usuário não autenticado. Faça login novamente.");
         setIsSaving(false);
         return;
       }
@@ -115,29 +120,53 @@ const AppSettings: React.FC<Props> = ({ company, setCompany, user, onUpdateUser 
       const oldEmail = currentUser.email;
       const oldUid = currentUser.uid;
 
+      console.log("🔐 Reautenticando usuário...");
+      
       // Reautentica o usuário com a senha atual
-      const credential = EmailAuthProvider.credential(oldEmail, currentPassword);
-      await reauthenticateWithCredential(currentUser, credential);
+      try {
+        const credential = EmailAuthProvider.credential(oldEmail, currentPassword);
+        await reauthenticateWithCredential(currentUser, credential);
+        console.log("✅ Reautenticação bem-sucedida");
+      } catch (authError: any) {
+        console.error("❌ Erro na reautenticação:", authError);
+        if (authError.code === 'auth/wrong-password') {
+          alert("❌ Senha atual incorreta.");
+        } else if (authError.code === 'auth/too-many-requests') {
+          alert("❌ Muitas tentativas. Aguarde alguns minutos e tente novamente.");
+        } else {
+          alert("❌ Erro ao verificar senha: " + authError.message);
+        }
+        setIsSaving(false);
+        return;
+      }
 
       let successMessage = "";
 
       // ✅ SE ESTÁ ALTERANDO APENAS A SENHA (sem alterar email)
       if (newPassword && !newEmail) {
-        await updatePassword(currentUser, newPassword);
-        successMessage = "✅ Senha atualizada com sucesso!";
-        
-        alert(successMessage);
-        setCurrentPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
-        setIsChangingCredentials(false);
-        setIsSaving(false);
-        return;
+        console.log("🔑 Alterando apenas senha...");
+        try {
+          await updatePassword(currentUser, newPassword);
+          successMessage = "✅ Senha atualizada com sucesso!";
+          
+          alert(successMessage);
+          setCurrentPassword('');
+          setNewPassword('');
+          setConfirmPassword('');
+          setIsChangingCredentials(false);
+          setIsSaving(false);
+          return;
+        } catch (pwdError: any) {
+          console.error("❌ Erro ao alterar senha:", pwdError);
+          alert("❌ Erro ao alterar senha: " + pwdError.message);
+          setIsSaving(false);
+          return;
+        }
       }
 
       // ✅ SE ESTÁ ALTERANDO O EMAIL (com ou sem senha)
       if (newEmail && newEmail !== oldEmail) {
-        console.log("🔄 Iniciando transferência de ADMIN para novo email:", newEmail);
+        console.log("📧 Iniciando transferência de ADMIN para novo email:", newEmail);
 
         // PASSO 1: Cria novo usuário no Firebase Authentication com a nova senha
         let newUserCredential;
@@ -146,12 +175,18 @@ const AppSettings: React.FC<Props> = ({ company, setCompany, user, onUpdateUser 
           newUserCredential = await createUserWithEmailAndPassword(auth, newEmail, newPassword);
           console.log("✅ Novo usuário criado no Auth com UID:", newUserCredential.user.uid);
         } catch (authError: any) {
+          console.error("❌ Erro ao criar usuário no Auth:", authError);
           if (authError.code === 'auth/email-already-in-use') {
             alert("❌ Este email já está cadastrado no sistema.\n\nUse outro email ou recupere a senha deste email existente.");
-            setIsSaving(false);
-            return;
+          } else if (authError.code === 'auth/invalid-email') {
+            alert("❌ Email inválido.");
+          } else if (authError.code === 'auth/weak-password') {
+            alert("❌ Senha muito fraca. Use no mínimo 6 caracteres.");
+          } else {
+            alert("❌ Erro ao criar novo usuário: " + authError.message);
           }
-          throw authError;
+          setIsSaving(false);
+          return;
         }
 
         const newUid = newUserCredential.user.uid;
@@ -167,16 +202,28 @@ const AppSettings: React.FC<Props> = ({ company, setCompany, user, onUpdateUser 
           profilePhotoUrl: userData.profilePhotoUrl || ''
         };
 
-        await setDoc(doc(db, "users", newUid), newAdminUser);
-        console.log("✅ Documento admin criado no Firestore");
+        try {
+          await setDoc(doc(db, "users", newUid), newAdminUser);
+          console.log("✅ Documento admin criado no Firestore");
+        } catch (firestoreError: any) {
+          console.error("❌ Erro ao criar documento no Firestore:", firestoreError);
+          alert("❌ Erro ao salvar novo admin no banco de dados: " + firestoreError.message);
+          setIsSaving(false);
+          return;
+        }
 
         // PASSO 3: Atualiza o settings/admin para apontar para o novo email
         console.log("⚙️ Atualizando settings/admin...");
-        await setDoc(doc(db, "settings", "admin"), { 
-          email: newEmail,
-          uid: newUid 
-        });
-        console.log("✅ Settings/admin atualizado");
+        try {
+          await setDoc(doc(db, "settings", "admin"), { 
+            email: newEmail,
+            uid: newUid 
+          });
+          console.log("✅ Settings/admin atualizado");
+        } catch (settingsError: any) {
+          console.error("⚠️ Aviso ao atualizar settings/admin:", settingsError);
+          // Não é crítico se falhar
+        }
 
         // PASSO 4: Remove o documento do admin antigo do Firestore (OPCIONAL - mas recomendado para limpeza)
         try {
@@ -196,15 +243,16 @@ const AppSettings: React.FC<Props> = ({ company, setCompany, user, onUpdateUser 
 ✅ Acesso: todas as páginas
 
 ⚠️ IMPORTANTE:
-- Você será deslogado automaticamente
+- Você será deslogado automaticamente em 3 segundos
 - Faça login com o NOVO EMAIL e NOVA SENHA
 - O email antigo (${oldEmail}) não terá mais acesso de admin
 
-🗑️ ATENÇÃO: O email antigo ainda existe no Firebase Authentication.
+🗑️ NOTA: O email antigo ainda existe no Firebase Authentication.
 Para remover completamente, acesse o Firebase Console:
 https://console.firebase.google.com
 → Authentication → Users → Delete ${oldEmail}`;
 
+        console.log("🎉 Transferência concluída com sucesso!");
         alert(successMessage);
         
         // Limpa os campos
@@ -215,27 +263,24 @@ https://console.firebase.google.com
         setIsChangingCredentials(false);
         
         // Faz logout automático após 3 segundos
+        console.log("⏳ Logout em 3 segundos...");
         setTimeout(() => {
           console.log("🚪 Fazendo logout...");
-          signOut(auth);
+          signOut(auth).then(() => {
+            console.log("✅ Logout realizado");
+          }).catch((error) => {
+            console.error("❌ Erro no logout:", error);
+          });
         }, 3000);
       }
       
     } catch (error: any) {
-      console.error("❌ Erro ao alterar credenciais:", error);
+      console.error("❌ Erro geral ao alterar credenciais:", error);
       
-      if (error.code === 'auth/wrong-password') {
-        alert("❌ Senha atual incorreta.");
-      } else if (error.code === 'auth/weak-password') {
-        alert("❌ A senha é muito fraca. Use no mínimo 6 caracteres.");
-      } else if (error.code === 'auth/email-already-in-use') {
-        alert("❌ Este email já está em uso.");
-      } else if (error.code === 'auth/invalid-email') {
-        alert("❌ Email inválido.");
-      } else if (error.code === 'auth/requires-recent-login') {
+      if (error.code === 'auth/requires-recent-login') {
         alert("❌ Por segurança, faça logout e login novamente antes de alterar suas credenciais.");
       } else {
-        alert("❌ Erro: " + error.message);
+        alert("❌ Erro inesperado: " + error.message);
       }
     } finally {
       setIsSaving(false);
@@ -257,10 +302,39 @@ https://console.firebase.google.com
             <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-3">
               <ShieldCheck size={24} className="text-blue-600" /> Dados da Empresa
             </h2>
-            <input placeholder="Nome da Empresa" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" value={companyData.name} onChange={e => setCompanyData({...companyData, name: e.target.value})} />
-            <input placeholder="Telefone" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" value={companyData.phone} onChange={e => setCompanyData({...companyData, phone: e.target.value})} />
-            <input placeholder="Email de Contato" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" value={companyData.email} onChange={e => setCompanyData({...companyData, email: e.target.value})} />
-            <input placeholder="Site (opcional)" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" value={companyData.website || ''} onChange={e => setCompanyData({...companyData, website: e.target.value})} />
+            <input 
+              placeholder="Nome da Empresa" 
+              className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" 
+              value={companyData.name} 
+              onChange={e => setCompanyData({...companyData, name: e.target.value})} 
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input 
+                placeholder="CNPJ" 
+                className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" 
+                value={(companyData as any).cnpj || ''} 
+                onChange={e => setCompanyData({...companyData, cnpj: e.target.value} as any)}
+                maxLength={18}
+              />
+              <input 
+                placeholder="Telefone" 
+                className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" 
+                value={companyData.phone} 
+                onChange={e => setCompanyData({...companyData, phone: e.target.value})} 
+              />
+            </div>
+            <input 
+              placeholder="Email de Contato" 
+              className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" 
+              value={companyData.email} 
+              onChange={e => setCompanyData({...companyData, email: e.target.value})} 
+            />
+            <input 
+              placeholder="Site (opcional)" 
+              className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" 
+              value={companyData.website || ''} 
+              onChange={e => setCompanyData({...companyData, website: e.target.value})} 
+            />
           </section>
 
           {/* PERFIL DO USUÁRIO */}
@@ -268,10 +342,19 @@ https://console.firebase.google.com
             <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-3">
               <UserIcon size={24} className="text-purple-600" /> Meu Perfil
             </h2>
-            <input placeholder="Nome Completo" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" value={userData.name} onChange={e => setUserData({...userData, name: e.target.value})} />
+            <input 
+              placeholder="Nome Completo" 
+              className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" 
+              value={userData.name} 
+              onChange={e => setUserData({...userData, name: e.target.value})} 
+            />
             
             <div className="pt-6 border-t border-slate-100">
-              <button type="submit" disabled={isSaving} className="w-full bg-blue-600 text-white px-8 py-5 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl flex items-center justify-center gap-3 disabled:opacity-50">
+              <button 
+                type="submit" 
+                disabled={isSaving} 
+                className="w-full bg-blue-600 text-white px-8 py-5 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl flex items-center justify-center gap-3 disabled:opacity-50"
+              >
                 {isSaving ? 'Salvando...' : showSuccess ? <><CheckCircle size={20}/> Salvo!</> : <><Save size={20}/> Salvar Alterações</>}
               </button>
             </div>
@@ -289,7 +372,10 @@ https://console.firebase.google.com
             {!isChangingCredentials && (
               <button
                 type="button"
-                onClick={() => setIsChangingCredentials(true)}
+                onClick={() => {
+                  console.log("🔓 Abrindo formulário de transferência");
+                  setIsChangingCredentials(true);
+                }}
                 className="bg-red-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-700 transition-all w-full"
               >
                 <Key size={16} className="inline mr-2" /> Transferir Admin para Novo Email
@@ -314,7 +400,10 @@ https://console.firebase.google.com
                     required
                     className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-slate-200 font-bold focus:border-red-400 outline-none" 
                     value={currentPassword}
-                    onChange={e => setCurrentPassword(e.target.value)}
+                    onChange={e => {
+                      console.log("🔑 Senha atual preenchida");
+                      setCurrentPassword(e.target.value);
+                    }}
                     placeholder="Confirme sua senha atual"
                   />
                 </div>
@@ -326,7 +415,10 @@ https://console.firebase.google.com
                     required
                     className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-slate-200 font-bold focus:border-red-400 outline-none" 
                     value={newEmail}
-                    onChange={e => setNewEmail(e.target.value)}
+                    onChange={e => {
+                      console.log("📧 Novo email preenchido:", e.target.value);
+                      setNewEmail(e.target.value);
+                    }}
                     placeholder="novo-admin@email.com"
                   />
                 </div>
@@ -338,7 +430,10 @@ https://console.firebase.google.com
                     required
                     className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-slate-200 font-bold focus:border-red-400 outline-none" 
                     value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)}
+                    onChange={e => {
+                      console.log("🔐 Nova senha preenchida");
+                      setNewPassword(e.target.value);
+                    }}
                     placeholder="Mínimo 6 caracteres"
                   />
                   <p className="text-[10px] text-slate-600 font-bold ml-1 mt-1">
@@ -353,7 +448,10 @@ https://console.firebase.google.com
                     required
                     className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-slate-200 font-bold focus:border-red-400 outline-none" 
                     value={confirmPassword}
-                    onChange={e => setConfirmPassword(e.target.value)}
+                    onChange={e => {
+                      console.log("✅ Confirmação de senha preenchida");
+                      setConfirmPassword(e.target.value);
+                    }}
                     placeholder="Digite novamente"
                   />
                 </div>
@@ -375,6 +473,7 @@ https://console.firebase.google.com
                   <button
                     type="submit"
                     disabled={isSaving}
+                    onClick={() => console.log("🖱️ Botão Confirmar clicado")}
                     className="flex-1 bg-red-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-red-700 transition-all disabled:opacity-50"
                   >
                     {isSaving ? '🔄 Transferindo...' : '✅ Confirmar Transferência'}
@@ -382,6 +481,7 @@ https://console.firebase.google.com
                   <button
                     type="button"
                     onClick={() => {
+                      console.log("❌ Cancelando transferência");
                       setIsChangingCredentials(false);
                       setCurrentPassword('');
                       setNewEmail('');
