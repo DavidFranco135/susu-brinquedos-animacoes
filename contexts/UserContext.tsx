@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, getDoc } from 'firebase/firestore';
 
 interface UserContextType {
   user: User | null;
@@ -28,42 +28,24 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // ✅ CORREÇÃO: Verifica qual é o email admin atual no documento settings/admin
-        let adminEmail = 'admsusu@gmail.com'; // valor padrão inicial
-        
-        try {
-          const adminDoc = await getDoc(doc(db, "settings", "admin"));
-          if (adminDoc.exists() && adminDoc.data().email) {
-            adminEmail = adminDoc.data().email;
-          } else {
-            // Se não existe o documento, cria com o email padrão
-            await setDoc(doc(db, "settings", "admin"), { email: adminEmail });
-          }
-        } catch (error) {
-          console.log("Erro ao buscar email admin:", error);
-        }
-
-        // Monitora em tempo real o documento do usuário no Firestore
+        // ✅ Busca o documento do usuário no Firestore
         const unsubUser = onSnapshot(doc(db, "users", firebaseUser.uid), async (docSnap) => {
           if (docSnap.exists()) {
+            // ✅ Usuário existe no Firestore - carrega normalmente
             setUser(docSnap.data() as User);
+            setLoading(false);
           } else {
-            // Se não existe, cria um novo usuário
-            // ✅ CORREÇÃO: Agora compara com o email admin dinâmico
-            const isAdmin = firebaseUser.email === adminEmail;
+            // ❌ REMOVIDO: Criação automática de usuário
+            // Se o usuário não existe no Firestore, NÃO cria automaticamente
+            // Isso significa que apenas usuários criados manualmente em "Colaboradores" terão acesso
             
-            const newUser: User = {
-              id: firebaseUser.uid,
-              name: firebaseUser.email?.split('@')[0] || 'Usuário',
-              email: firebaseUser.email || '',
-              role: isAdmin ? 'ADMIN' : 'EMPLOYEE',
-              allowedPages: isAdmin ? [] : [] // Admin tem acesso a tudo
-            };
+            console.warn('⚠️ Usuário autenticado mas sem documento no Firestore:', firebaseUser.email);
+            console.warn('📋 Para dar acesso, crie o usuário em: Colaboradores → Novo Colaborador');
             
-            await setDoc(doc(db, "users", firebaseUser.uid), newUser);
-            setUser(newUser);
+            // Define user como null para bloquear acesso
+            setUser(null);
+            setLoading(false);
           }
-          setLoading(false);
         });
 
         return () => unsubUser();
