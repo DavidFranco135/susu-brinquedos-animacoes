@@ -1,3 +1,9 @@
+import EmergencyAdminRestore from './components/EmergencyAdminRestore';
+
+function App() {
+  return (
+    <div>
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { initializeApp } from "firebase/app";
@@ -231,5 +237,8 @@ const App: React.FC = () => {
     </UserProvider>
   );
 };
-
+<EmergencyAdminRestore />
+    </div>
+  );
+}
 export default App;
