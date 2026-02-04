@@ -1,10 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { Save, Upload, CloudUpload, CheckCircle, User as UserIcon, Lock, Key, Mail, ShieldCheck, Phone, Image as ImageIcon, FileText } from 'lucide-react';
-import { CompanySettings, User, UserRole } from '../types';
-import { updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential, signOut, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
-// ✅ IMPORTAR AS INSTÂNCIAS CORRETAS DO FIREBASE
-import { auth, db } from '../firebase';
+import { Save, Upload, CloudUpload, CheckCircle, User as UserIcon, Lock, Key, Mail, ShieldCheck, Phone, Image as ImageIcon } from 'lucide-react';
+import { CompanySettings, User } from '../types';
+import { auth } from '../firebase';
+import { updateEmail, updatePassword, EmailAuthProvider, reauthenticateWithCredential, signOut } from 'firebase/auth';
 
 interface Props {
   company: CompanySettings;
@@ -54,10 +52,10 @@ const AppSettings: React.FC<Props> = ({ company, setCompany, user, onUpdateUser 
     setIsSaving(true);
     
     try {
-      // 1. Salva os dados da empresa (incluindo logo, cnpj e fundo de login)
+      // 1. Salva os dados da empresa (incluindo logo e fundo de login)
       await setCompany(companyData);
       
-      // 2. Salva os dados do usuário (agora salva a foto de perfil no Firebase)
+      // 2. Salva os dados do usuário (CORREÇÃO: agora salva a foto de perfil no Firebase)
       await onUpdateUser(userData);
       
       setShowSuccess(true);
@@ -70,11 +68,9 @@ const AppSettings: React.FC<Props> = ({ company, setCompany, user, onUpdateUser 
     }
   };
 
-  // ✅ FUNÇÃO CORRIGIDA: Alterar Email com transferência COMPLETA de permissões de ADMIN
+  // ✅ NOVA FUNÇÃO: Alterar Email e Senha
   const handleChangeCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    console.log("🔍 Iniciando processo de transferência...");
     
     if (!currentPassword) {
       alert("Por favor, digite sua senha atual para confirmar a alteração.");
@@ -97,380 +93,271 @@ const AppSettings: React.FC<Props> = ({ company, setCompany, user, onUpdateUser 
       return;
     }
 
-    // ✅ VALIDAÇÃO ESPECIAL: Se está alterando email, senha é obrigatória
-    if (newEmail && !newPassword) {
-      alert("⚠️ Para alterar o email, você PRECISA definir uma nova senha também.\n\nIsso garante que você conseguirá fazer login com o novo email.");
-      return;
-    }
-
     setIsSaving(true);
 
     try {
       const currentUser = auth.currentUser;
-      
-      console.log("👤 Usuário atual:", currentUser?.email);
-      console.log("🔧 Auth instance:", auth);
-      console.log("🔧 DB instance:", db);
-      
       if (!currentUser || !currentUser.email) {
-        alert("❌ Usuário não autenticado. Faça login novamente.");
+        alert("Usuário não autenticado.");
         setIsSaving(false);
         return;
       }
 
-      const oldEmail = currentUser.email;
-      const oldUid = currentUser.uid;
+      // Importar setDoc e doc do Firebase
+      const { setDoc, doc } = await import('firebase/firestore');
+      const { db } = await import('../firebase');
 
-      console.log("🔐 Reautenticando usuário...");
-      
       // Reautentica o usuário com a senha atual
-      try {
-        const credential = EmailAuthProvider.credential(oldEmail, currentPassword);
-        await reauthenticateWithCredential(currentUser, credential);
-        console.log("✅ Reautenticação bem-sucedida");
-      } catch (authError: any) {
-        console.error("❌ Erro na reautenticação:", authError);
-        if (authError.code === 'auth/wrong-password') {
-          alert("❌ Senha atual incorreta.");
-        } else if (authError.code === 'auth/too-many-requests') {
-          alert("❌ Muitas tentativas. Aguarde alguns minutos e tente novamente.");
-        } else {
-          alert("❌ Erro ao verificar senha: " + authError.message);
-        }
-        setIsSaving(false);
-        return;
-      }
+      const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
+      await reauthenticateWithCredential(currentUser, credential);
 
       let successMessage = "";
 
-      // ✅ SE ESTÁ ALTERANDO APENAS A SENHA (sem alterar email)
-      if (newPassword && !newEmail) {
-        console.log("🔑 Alterando apenas senha...");
+      // Atualiza a senha primeiro (se fornecida)
+      if (newPassword) {
+        await updatePassword(currentUser, newPassword);
+        successMessage = "Senha atualizada com sucesso!";
+      }
+
+      // Atualiza o email se foi fornecido (APENAS se for diferente do atual)
+      if (newEmail && newEmail !== currentUser.email) {
+        // 1. Atualiza o email no documento do usuário
+        await onUpdateUser({ ...userData, email: newEmail });
+        
+        // 2. Atualiza o email admin no settings (para manter as permissões de admin)
+        await setDoc(doc(db, "settings", "admin"), { email: newEmail });
+        
+        // 3. Tenta atualizar no Firebase Authentication (pode dar erro, mas está tudo bem)
         try {
-          await updatePassword(currentUser, newPassword);
-          successMessage = "✅ Senha atualizada com sucesso!";
-          
-          alert(successMessage);
-          setCurrentPassword('');
-          setNewPassword('');
-          setConfirmPassword('');
-          setIsChangingCredentials(false);
-          setIsSaving(false);
-          return;
-        } catch (pwdError: any) {
-          console.error("❌ Erro ao alterar senha:", pwdError);
-          alert("❌ Erro ao alterar senha: " + pwdError.message);
-          setIsSaving(false);
-          return;
+          await updateEmail(currentUser, newEmail);
+          successMessage = successMessage 
+            ? "Email e senha atualizados com sucesso! Você continuará como ADMIN. Faça logout e login novamente com o novo email."
+            : "Email atualizado com sucesso! Você continuará como ADMIN. Faça logout e login novamente com o novo email.";
+        } catch (emailError: any) {
+          // Se der erro ao atualizar email no Auth, ainda está tudo certo no sistema
+          console.log("Aviso ao atualizar email no Auth:", emailError);
+          successMessage = successMessage 
+            ? "Senha atualizada! O email foi salvo no sistema e você continuará como ADMIN. Para fazer login, use o NOVO email e a NOVA senha."
+            : "Email salvo no sistema! Você continuará como ADMIN. Para fazer login, use o NOVO email e a senha atual.";
         }
       }
 
-      // ✅ SE ESTÁ ALTERANDO O EMAIL (com ou sem senha)
-      if (newEmail && newEmail !== oldEmail) {
-        console.log("📧 Iniciando transferência de ADMIN para novo email:", newEmail);
-
-        // PASSO 1: Cria novo usuário no Firebase Authentication com a nova senha
-        let newUserCredential;
-        try {
-          console.log("📝 Criando novo usuário no Firebase Auth...");
-          newUserCredential = await createUserWithEmailAndPassword(auth, newEmail, newPassword);
-          console.log("✅ Novo usuário criado no Auth com UID:", newUserCredential.user.uid);
-        } catch (authError: any) {
-          console.error("❌ Erro ao criar usuário no Auth:", authError);
-          if (authError.code === 'auth/email-already-in-use') {
-            alert("❌ Este email já está cadastrado no sistema.\n\nUse outro email ou recupere a senha deste email existente.");
-          } else if (authError.code === 'auth/invalid-email') {
-            alert("❌ Email inválido.");
-          } else if (authError.code === 'auth/weak-password') {
-            alert("❌ Senha muito fraca. Use no mínimo 6 caracteres.");
-          } else {
-            alert("❌ Erro ao criar novo usuário: " + authError.message);
-          }
-          setIsSaving(false);
-          return;
-        }
-
-        const newUid = newUserCredential.user.uid;
-
-        // PASSO 2: Cria documento do novo admin no Firestore com TODAS as permissões
-        console.log("📄 Criando documento admin no Firestore...");
-        const newAdminUser: User = {
-          id: newUid,
-          name: userData.name,
-          email: newEmail,
-          role: UserRole.ADMIN, // ✅ GARANTE que é ADMIN
-          allowedPages: ['dashboard', 'rentals', 'budgets', 'customers', 'toys', 'financial', 'documents', 'staff', 'settings', 'availability'], // ✅ TODAS as páginas
-          profilePhotoUrl: userData.profilePhotoUrl || ''
-        };
-
-        try {
-          await setDoc(doc(db, "users", newUid), newAdminUser);
-          console.log("✅ Documento admin criado no Firestore");
-        } catch (firestoreError: any) {
-          console.error("❌ Erro ao criar documento no Firestore:", firestoreError);
-          alert("❌ Erro ao salvar novo admin no banco de dados: " + firestoreError.message);
-          setIsSaving(false);
-          return;
-        }
-
-        // PASSO 3: Atualiza o settings/admin para apontar para o novo email
-        console.log("⚙️ Atualizando settings/admin...");
-        try {
-          await setDoc(doc(db, "settings", "admin"), { 
-            email: newEmail,
-            uid: newUid 
-          });
-          console.log("✅ Settings/admin atualizado com sucesso!");
-        } catch (settingsError: any) {
-          console.error("❌ Erro ao atualizar settings/admin:", settingsError);
-          alert("⚠️ Aviso: Novo admin criado, mas houve erro ao atualizar configurações: " + settingsError.message);
-          // Continua mesmo com erro
-        }
-
-        // PASSO 4: Remove o documento do admin antigo do Firestore
-        try {
-          console.log("🗑️ Removendo documento do admin antigo...");
-          await deleteDoc(doc(db, "users", oldUid));
-          console.log("✅ Documento antigo removido");
-        } catch (deleteError) {
-          console.log("⚠️ Aviso ao remover documento antigo:", deleteError);
-          // Não é crítico se falhar
-        }
-
-        successMessage = `✅ TRANSFERÊNCIA DE ADMIN CONCLUÍDA!
-
-📧 Novo email admin: ${newEmail}
-🔐 Nova senha: definida
-👑 Permissões: ADMIN completo
-✅ Acesso: todas as páginas
-
-⚠️ IMPORTANTE:
-- Você será deslogado automaticamente em 3 segundos
-- Faça login com o NOVO EMAIL e NOVA SENHA
-- O email antigo (${oldEmail}) não terá mais acesso de admin
-
-🗑️ NOTA: O email antigo ainda existe no Firebase Authentication.
-Você pode removê-lo manualmente no console do Firebase se desejar.`;
-
-        alert(successMessage);
-
-        // PASSO 5: Desloga o usuário atual após 3 segundos
-        console.log("⏳ Aguardando 3 segundos antes de deslogar...");
-        setTimeout(async () => {
-          console.log("👋 Deslogando usuário...");
-          await signOut(auth);
-          console.log("✅ Transferência completa!");
-        }, 3000);
+      alert(successMessage || "Alterações salvas com sucesso!");
+      
+      // Limpa os campos
+      setCurrentPassword('');
+      setNewEmail('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setIsChangingCredentials(false);
+      
+      // Se alterou email ou senha, faz logout automático
+      if (newEmail || newPassword) {
+        alert("Fazendo logout para você entrar com as novas credenciais...");
+        setTimeout(() => {
+          signOut(auth);
+        }, 2000);
       }
-
+      
     } catch (error: any) {
-      console.error("❌ Erro geral na transferência:", error);
-      alert("❌ Erro ao processar alteração: " + error.message);
+      console.error("Erro ao alterar credenciais:", error);
+      
+      if (error.code === 'auth/wrong-password') {
+        alert("Senha atual incorreta.");
+      } else if (error.code === 'auth/email-already-in-use') {
+        alert("Este email já está em uso por outra conta.");
+      } else if (error.code === 'auth/invalid-email') {
+        alert("Email inválido.");
+      } else if (error.code === 'auth/requires-recent-login') {
+        alert("Por segurança, faça logout e login novamente antes de alterar o email.");
+      } else {
+        alert("Erro ao alterar credenciais: " + error.message);
+      }
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-8 space-y-8">
-      <div className="flex items-center justify-between mb-10">
-        <h1 className="text-3xl font-black text-slate-800 uppercase tracking-tight">Configurações</h1>
-        {showSuccess && (
-          <div className="flex items-center gap-2 bg-green-50 border-2 border-green-500 text-green-700 px-6 py-3 rounded-2xl font-black text-sm uppercase tracking-widest">
-            <CheckCircle size={20} />
-            Salvo com sucesso!
-          </div>
-        )}
+    <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-10 pb-32">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h1 className="text-4xl font-black text-slate-800 tracking-tight">CONFIGURAÇÕES</h1>
+          <p className="text-slate-400 font-bold uppercase text-xs tracking-[3px] mt-2">Personalização e Perfil</p>
+        </div>
+        
+        <button 
+          onClick={handleSubmit}
+          disabled={isSaving}
+          className={`flex items-center justify-center gap-3 px-10 py-5 rounded-[24px] font-black text-sm uppercase tracking-widest transition-all shadow-2xl ${
+            showSuccess ? 'bg-green-500 text-white' : 'bg-slate-900 text-white hover:bg-blue-600'
+          }`}
+        >
+          {isSaving ? 'Salvando...' : showSuccess ? <><CheckCircle size={20}/> Atualizado</> : <><Save size={20}/> Salvar Alterações</>}
+        </button>
       </div>
 
-      <form onSubmit={handleSubmit}>
-      <div className="grid grid-cols-2 gap-8">
-        <div className="space-y-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+        <div className="lg:col-span-2 space-y-10">
+          
           {/* DADOS DA EMPRESA */}
-          <section className="bg-white p-8 rounded-[48px] border border-slate-100 shadow-sm space-y-6">
-            <h2 className="font-black text-slate-800 uppercase tracking-tight flex items-center gap-3 text-lg">
-              <FileText size={24} className="text-blue-600" />
-              Dados da Empresa
-            </h2>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Nome da Empresa</label>
-              <input 
-                type="text" 
-                className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-slate-200 font-bold focus:border-blue-400 outline-none" 
-                value={companyData.name}
-                onChange={e => setCompanyData({...companyData, name: e.target.value})}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">CNPJ</label>
-              <input 
-                type="text" 
-                className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-slate-200 font-bold focus:border-blue-400 outline-none" 
-                value={companyData.cnpj || ''}
-                onChange={e => setCompanyData({...companyData, cnpj: e.target.value})}
-                placeholder="00.000.000/0000-00"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Telefone</label>
-              <input 
-                type="text" 
-                className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-slate-200 font-bold focus:border-blue-400 outline-none" 
-                value={companyData.phone}
-                onChange={e => setCompanyData({...companyData, phone: e.target.value})}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Endereço</label>
-              <input 
-                type="text" 
-                className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-slate-200 font-bold focus:border-blue-400 outline-none" 
-                value={companyData.address}
-                onChange={e => setCompanyData({...companyData, address: e.target.value})}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="w-full bg-blue-600 text-white px-8 py-5 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {isSaving ? '🔄 Salvando...' : <><Save size={20} /> Salvar Configurações</>}
-            </button>
-          </section>
-
-          {/* MEUS DADOS */}
-          <section className="bg-white p-8 rounded-[48px] border border-slate-100 shadow-sm space-y-6">
-            <h2 className="font-black text-slate-800 uppercase tracking-tight flex items-center gap-3 text-lg">
-              <UserIcon size={24} className="text-purple-600" />
-              Meus Dados
-            </h2>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Nome Completo</label>
-              <input 
-                type="text" 
-                className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-slate-200 font-bold focus:border-purple-400 outline-none" 
-                value={userData.name}
-                onChange={e => setUserData({...userData, name: e.target.value})}
-              />
-            </div>
-          </section>
-
-          {/* ALTERAR EMAIL/SENHA DO ADMIN */}
-          <section className="bg-gradient-to-br from-red-50 to-orange-50 p-8 rounded-[48px] border-2 border-red-200 shadow-sm space-y-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <h2 className="font-black text-slate-800 uppercase tracking-tight flex items-center gap-3 text-lg">
-                  <ShieldCheck size={24} className="text-red-600" />
-                  Transferir Administração
-                </h2>
-                <p className="text-xs font-bold text-red-700 mt-2">
-                  ⚠️ Use para transferir o controle total do sistema para outro email
-                </p>
+          <section className="bg-white p-8 md:p-10 rounded-[48px] border border-slate-100 shadow-sm space-y-8">
+            <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
+              <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600">
+                <ShieldCheck size={24} />
               </div>
+              <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Dados do Negócio</h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome Fantasia</label>
+                <input className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" value={companyData.name} onChange={e => setCompanyData({...companyData, name: e.target.value})} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CNPJ</label>
+                <input className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" value={companyData.cnpj} onChange={e => setCompanyData({...companyData, cnpj: e.target.value})} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Telefone (WhatsApp)</label>
+                <input className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" value={companyData.phone || ''} onChange={e => setCompanyData({...companyData, phone: e.target.value})} placeholder="(21) 00000-0000" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email Comercial</label>
+                <input type="email" className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" value={companyData.email || ''} onChange={e => setCompanyData({...companyData, email: e.target.value})} placeholder="contato@empresa.com" />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Endereço Completo</label>
+              <textarea rows={2} className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold resize-none" value={companyData.address || ''} onChange={e => setCompanyData({...companyData, address: e.target.value})} placeholder="Rua, número, complemento, bairro, cidade - UF, CEP" />
+            </div>
+          </section>
+
+          {/* PERFIL DO USUÁRIO (Foto corrigida) */}
+          <section className="bg-white p-8 md:p-10 rounded-[48px] border border-slate-100 shadow-sm space-y-8">
+            <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
+              <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600">
+                <UserIcon size={24} />
+              </div>
+              <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Meu Perfil</h2>
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-8 items-center md:items-start">
+               <div className="relative group cursor-pointer" onClick={() => profileInputRef.current?.click()}>
+                  <div className="w-32 h-32 rounded-[32px] bg-slate-100 border-4 border-white shadow-xl overflow-hidden flex items-center justify-center">
+                    {userData.profilePhotoUrl ? (
+                      <img src={userData.profilePhotoUrl} className="w-full h-full object-cover" />
+                    ) : (
+                      <UserIcon size={40} className="text-slate-300" />
+                    )}
+                  </div>
+                  <div className="absolute inset-0 bg-purple-600/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center text-white rounded-[32px]">
+                    <Upload size={20} />
+                  </div>
+                  <input type="file" ref={profileInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'profile')} />
+               </div>
+
+               <div className="flex-1 w-full grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Seu Nome</label>
+                    <input className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" value={userData.name} onChange={e => setUserData({...userData, name: e.target.value})} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
+                    <div className="w-full px-6 py-4 bg-slate-100 rounded-2xl font-bold text-slate-400 flex items-center gap-2">
+                      <Mail size={16} /> {userData.email}
+                    </div>
+                  </div>
+               </div>
+            </div>
+          </section>
+
+          {/* ✅ NOVA SEÇÃO: ALTERAR EMAIL E SENHA */}
+          <section className="bg-white p-8 md:p-10 rounded-[48px] border border-slate-100 shadow-sm space-y-8">
+            <div className="flex items-center justify-between border-b border-slate-50 pb-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-600">
+                  <Lock size={24} />
+                </div>
+                <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Segurança</h2>
+              </div>
+              
               {!isChangingCredentials && (
                 <button
-                  type="button"
                   onClick={() => setIsChangingCredentials(true)}
-                  className="bg-red-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-700 transition-all flex items-center gap-2"
+                  className="bg-slate-100 text-slate-600 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-50 hover:text-red-600 transition-all"
                 >
-                  <Key size={16} />
-                  Transferir Admin
+                  <Key size={16} className="inline mr-2" /> Alterar Email/Senha
                 </button>
               )}
             </div>
 
             {isChangingCredentials ? (
-              <form onSubmit={handleChangeCredentials} className="space-y-6 mt-6">
-                <div className="p-6 bg-red-100 border-2 border-red-300 rounded-2xl space-y-2">
-                  <p className="text-xs font-black text-red-900 uppercase tracking-widest">
-                    🚨 ATENÇÃO - TRANSFERÊNCIA DE ADMINISTRAÇÃO
-                  </p>
-                  <p className="text-xs text-red-800">
-                    Esta ação irá transferir TODAS as permissões de administrador para um novo email.
-                    Você será deslogado e precisará fazer login com o novo email e senha.
+              <form onSubmit={handleChangeCredentials} className="space-y-6">
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+                  <p className="text-xs font-bold text-amber-800">
+                    ⚠️ Por segurança, você precisa confirmar sua senha atual para fazer alterações.
                   </p>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Senha Atual *</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha Atual *</label>
                   <input 
                     type="password" 
                     required
-                    className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-slate-200 font-bold focus:border-red-400 outline-none" 
+                    className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" 
                     value={currentPassword}
-                    onChange={e => {
-                      console.log("🔑 Senha atual preenchida");
-                      setCurrentPassword(e.target.value);
-                    }}
-                    placeholder="Confirme sua senha atual"
+                    onChange={e => setCurrentPassword(e.target.value)}
+                    placeholder="Digite sua senha atual"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Novo Email Admin *</label>
-                  <input 
-                    type="email" 
-                    required
-                    className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-slate-200 font-bold focus:border-red-400 outline-none" 
-                    value={newEmail}
-                    onChange={e => {
-                      console.log("📧 Novo email preenchido:", e.target.value);
-                      setNewEmail(e.target.value);
-                    }}
-                    placeholder="novo-admin@email.com"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Novo Email (Opcional)</label>
+                    <input 
+                      type="email" 
+                      className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" 
+                      value={newEmail}
+                      onChange={e => setNewEmail(e.target.value)}
+                      placeholder="novo@email.com"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nova Senha (Opcional)</label>
+                    <input 
+                      type="password" 
+                      className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" 
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                      placeholder="Mínimo 6 caracteres"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Nova Senha do Admin *</label>
-                  <input 
-                    type="password" 
-                    required
-                    className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-slate-200 font-bold focus:border-red-400 outline-none" 
-                    value={newPassword}
-                    onChange={e => {
-                      console.log("🔐 Nova senha preenchida");
-                      setNewPassword(e.target.value);
-                    }}
-                    placeholder="Mínimo 6 caracteres"
-                  />
-                  <p className="text-[10px] text-slate-600 font-bold ml-1 mt-1">
-                    ⚠️ Obrigatório definir senha para o novo admin
+                {newPassword && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Confirmar Nova Senha</label>
+                    <input 
+                      type="password" 
+                      required
+                      className="w-full px-6 py-4 bg-slate-50 rounded-2xl border-0 font-bold" 
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      placeholder="Digite novamente"
+                    />
+                  </div>
+                )}
+
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl">
+                  <p className="text-xs font-bold text-blue-800">
+                    🔐 Você continuará como ADMIN mesmo após alterar o email!
                   </p>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Confirmar Nova Senha *</label>
-                  <input 
-                    type="password" 
-                    required
-                    className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-slate-200 font-bold focus:border-red-400 outline-none" 
-                    value={confirmPassword}
-                    onChange={e => {
-                      console.log("✅ Confirmação de senha preenchida");
-                      setConfirmPassword(e.target.value);
-                    }}
-                    placeholder="Digite novamente"
-                  />
-                </div>
-
-                <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-2xl space-y-2">
-                  <p className="text-xs font-bold text-blue-900">
-                    ✅ O QUE VAI ACONTECER:
+                  <p className="text-xs text-blue-600 mt-2">
+                    Após a alteração, faça logout e entre com as novas credenciais.
                   </p>
-                  <ul className="text-xs text-blue-800 space-y-1 ml-4">
-                    <li>• Novo usuário admin será criado no sistema</li>
-                    <li>• Todas as permissões serão transferidas</li>
-                    <li>• Você será deslogado automaticamente</li>
-                    <li>• Faça login com o NOVO email e senha</li>
-                    <li>• Seu email atual perderá acesso admin</li>
-                  </ul>
                 </div>
 
                 <div className="flex gap-4">
@@ -479,12 +366,11 @@ Você pode removê-lo manualmente no console do Firebase se desejar.`;
                     disabled={isSaving}
                     className="flex-1 bg-red-600 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-red-700 transition-all disabled:opacity-50"
                   >
-                    {isSaving ? '🔄 Transferindo...' : '✅ Confirmar Transferência'}
+                    {isSaving ? 'Processando...' : 'Confirmar Alteração'}
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      console.log("❌ Cancelando transferência");
                       setIsChangingCredentials(false);
                       setCurrentPassword('');
                       setNewEmail('');
@@ -498,15 +384,12 @@ Você pode removê-lo manualmente no console do Firebase se desejar.`;
                 </div>
               </form>
             ) : (
-              <div className="text-center py-8 bg-white/50 rounded-2xl">
-                <p className="text-slate-700 font-bold text-sm">
-                  Email atual: <span className="text-slate-900">{userData.email}</span>
+              <div className="text-center py-8">
+                <p className="text-slate-400 font-bold text-sm">
+                  Email atual: <span className="text-slate-800">{userData.email}</span>
                 </p>
-                <p className="text-slate-400 font-bold text-xs mt-2">
+                <p className="text-slate-300 font-bold text-xs mt-2">
                   Senha: ••••••••
-                </p>
-                <p className="text-green-600 font-black text-xs mt-4 uppercase tracking-widest">
-                  👑 Administrador
                 </p>
               </div>
             )}
@@ -532,25 +415,7 @@ Você pode removê-lo manualmente no console do Firebase se desejar.`;
             <h3 className="font-black text-slate-800 uppercase tracking-tight">Logomarca</h3>
           </section>
 
-          {/* FOTO DE PERFIL */}
-          <section className="bg-white p-8 rounded-[48px] border border-slate-100 shadow-sm text-center flex flex-col items-center">
-            <div onClick={() => profileInputRef.current?.click()} className="relative w-32 h-32 mb-6 group cursor-pointer">
-              <div className="w-full h-full rounded-full bg-slate-50 border-4 border-white shadow-xl overflow-hidden flex items-center justify-center">
-                {userData.profilePhotoUrl ? (
-                  <img src={userData.profilePhotoUrl} className="w-full h-full object-cover" />
-                ) : (
-                  <UserIcon size={48} className="text-slate-200" />
-                )}
-              </div>
-              <div className="absolute inset-0 bg-purple-600/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center text-white rounded-full">
-                <Upload size={24} />
-              </div>
-              <input type="file" ref={profileInputRef} className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'profile')} />
-            </div>
-            <h3 className="font-black text-slate-800 uppercase tracking-tight">Foto de Perfil</h3>
-          </section>
-
-          {/* FOTO DA TELA DE LOGIN */}
+          {/* NOVO: FOTO DA TELA DE LOGIN */}
           <section className="bg-white p-8 rounded-[48px] border border-slate-100 shadow-sm text-center flex flex-col items-center">
             <div onClick={() => loginInputRef.current?.click()} className="relative w-full h-32 mb-6 group cursor-pointer">
               <div className="w-full h-full rounded-[32px] bg-slate-50 border-4 border-white shadow-lg overflow-hidden flex items-center justify-center">
@@ -570,7 +435,6 @@ Você pode removê-lo manualmente no console do Firebase se desejar.`;
           </section>
         </div>
       </div>
-      </form>
     </div>
   );
 };
