@@ -241,19 +241,26 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
     handleDownloadPDFUniversal('rentals-report-print', 'Relatorio-Reservas-' + period);
   };
 
-  const handleCompleteEvent = (rental: Rental) => {
+  const handleCompleteEvent = async (rental: Rental) => {
     const pending = rental.totalValue - rental.entryValue;
     const msg = pending > 0 
       ? 'Concluir este evento? O saldo de R$ ' + pending.toLocaleString('pt-BR') + ' será marcado como PAGO e entrará no financeiro.'
       : 'Marcar este evento como concluído?';
       
     if (!confirm(msg)) return;
-    
-    setRentals(prev => prev.map(r => r.id === rental.id ? {
-      ...r,
-      status: RentalStatus.COMPLETED,
-      entryValue: r.totalValue 
-    } : r));
+
+    try {
+      const updatedRental = {
+        ...rental,
+        status: RentalStatus.COMPLETED,
+        entryValue: rental.totalValue 
+      };
+      await setDoc(doc(db, "rentals", rental.id), updatedRental);
+      setRentals(prev => prev.map(r => r.id === rental.id ? updatedRental : r));
+    } catch (error) {
+      console.error("Erro ao concluir evento:", error);
+      alert("Erro ao atualizar o estado da reserva no servidor.");
+    }
   };
 
  const handleDeleteRental = async (id: string) => {
@@ -310,53 +317,34 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
     });
   };
 
-  // ✅ CORREÇÃO: SALVAMENTO DE CLIENTE PADRONIZADO E SEM ERRO
   const handleAddNewCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const customerId = `c${Date.now()}`;
     const newCustomer: Customer = { 
-      id: customerId, 
+      id: `c${Date.now()}`, 
       createdAt: new Date().toISOString(), 
-      name: newCustomerData.name || '',
-      phone: newCustomerData.phone || '',
-      address: newCustomerData.address || '',
-      isCompany: !!newCustomerData.isCompany,
-      cnpj: newCustomerData.cnpj || '',
-      cpf: newCustomerData.cpf || '',
-      notes: newCustomerData.notes || ''
+      ...(newCustomerData as any) 
     };
     
     try {
-      await setDoc(doc(db, "customers", customerId), newCustomer);
+      await setDoc(doc(db, "customers", newCustomer.id), newCustomer);
       setCustomers(prev => [...prev, newCustomer]);
-      
-      // Vincula o cliente novo à reserva atual
-      setFormData(prev => ({ 
-        ...prev, 
-        customerId: customerId, 
-        eventAddress: newCustomer.address 
-      }));
-      
-      // Fecha o mini-form e limpa
+      setFormData(prev => ({ ...prev, customerId: newCustomer.id, eventAddress: newCustomer.address || '' }));
       setIsAddingCustomer(false);
       setNewCustomerData({ name: '', phone: '', address: '', isCompany: false, cnpj: '', cpf: '', notes: '' });
-      
-      alert("Cliente salvo");
     } catch (error) {
       console.error("Erro ao criar cliente:", error);
-      alert("Erro ao salvar cliente no banco de dados.");
+      alert("Erro ao criar o cliente. Tente novamente.");
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // FUNÇÃO CORRIGIDA PARA SALVAR NO FIREBASE
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.customerId) return alert("Selecione um cliente");
 
     const selectedToyIds = formData.toyIds || [];
     const toysBlocked: string[] = [];
 
-    // ✅ LÓGICA DE AVISO: VERIFICA SE JÁ EXISTEM RESERVAS PARA O DIA
     selectedToyIds.forEach(tid => {
       const toy = toys.find(t => t.id === tid);
       if (!toy) return;
@@ -368,42 +356,39 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
         r.id !== editingRental?.id
       ).length;
 
-      // Se atingiu o limite de estoque, adiciona na lista de aviso
-      if (unitsRented >= toy.quantity) {
+      if (unitsRented + 1 > toy.quantity) {
         toysBlocked.push(toy.name);
       }
     });
 
-    // Se houver conflito, apenas avisa e pede confirmação para prosseguir
     if (toysBlocked.length > 0) {
-      const msg = '⚠️ AVISO DE DISPONIBILIDADE\n\n' +
-                  'Os itens abaixo já possuem reservas para o dia ' + 
-                  new Date(formData.date! + 'T00:00:00').toLocaleDateString('pt-BR') + ':\n\n• ' + 
-                  toysBlocked.join('\n• ') + 
-                  '\n\nDeseja confirmar este agendamento mesmo assim?';
-      
-      if (!confirm(msg)) return;
+      return alert('🚫 BRINQUEDO INDISPONÍVEL!\n\nOs itens abaixo já atingiram o limite de estoque para o dia ' + new Date(formData.date! + 'T00:00:00').toLocaleDateString('pt-BR') + ':\n\n• ' + toysBlocked.join('\n• '));
     }
     
     const customer = customers.find(c => c.id === formData.customerId);
     if (!customer) return alert('Cliente não encontrado');
 
-    if (editingRental) {
-      setRentals(prev => prev.map(r => 
-        r.id === editingRental.id 
-          ? { ...r, ...formData, customerName: customer.name } as Rental
-          : r
-      ));
-    } else {
-      const newRental: Rental = { 
-        id: `r${Date.now()}`, 
-        createdAt: new Date().toISOString(), 
-        customerName: customer.name,
-        ...(formData as any) 
-      };
-      setRentals(prev => [...prev, newRental]);
+    try {
+      if (editingRental) {
+        const updatedRental = { ...editingRental, ...formData, customerName: customer.name } as Rental;
+        await setDoc(doc(db, "rentals", editingRental.id), updatedRental);
+        setRentals(prev => prev.map(r => r.id === editingRental.id ? updatedRental : r));
+      } else {
+        const newId = `r${Date.now()}`;
+        const newRental: Rental = { 
+          id: newId, 
+          createdAt: new Date().toISOString(), 
+          customerName: customer.name,
+          ...(formData as any) 
+        };
+        await setDoc(doc(db, "rentals", newId), newRental);
+        setRentals(prev => [...prev, newRental]);
+      }
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error("Erro ao salvar reserva:", error);
+      alert("Erro ao salvar no banco de dados. Verifique a sua ligação.");
     }
-    setIsModalOpen(false);
   };
 
   return (
