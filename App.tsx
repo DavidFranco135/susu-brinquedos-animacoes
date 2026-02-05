@@ -170,7 +170,10 @@ const AppContent: React.FC = () => {
                 <Route path="/reservas" element={hasAccess('rentals') ? <Rentals rentals={rentals} setRentals={(a: any) => { 
                   const n = typeof a === 'function' ? a(rentals) : a; 
                   n.forEach((r: Rental) => setDoc(doc(db, "rentals", r.id), r)); 
-                }} customers={customers} toys={toys} /> : <Navigate to="/" />} />
+                }} customers={customers} setCustomers={(a: any) => { 
+                  const n = typeof a === 'function' ? a(customers) : a; 
+                  n.forEach((c: Customer) => setDoc(doc(db, "customers", c.id), c)); 
+                }} toys={toys} /> : <Navigate to="/" />} />
                 
                 <Route path="/brinquedos" element={hasAccess('toys') ? <Inventory 
                   toys={toys} 
