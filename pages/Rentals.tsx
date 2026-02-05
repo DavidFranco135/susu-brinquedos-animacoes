@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, X, ChevronLeft, ChevronRight, Edit3, Calendar as CalendarIcon, List, CalendarDays, BarChart3, Clock, CheckCircle2, MapPin, UserPlus, FileSpreadsheet, Download, Phone, Share2, MessageCircle, Trash2, ClipboardList, Filter, DollarSign, Building2, Users } from 'lucide-react';
 import { Rental, RentalStatus, Customer, Toy, User, UserRole, PaymentMethod } from '../types';
-import { deleteDoc, doc, setDoc } from "firebase/firestore";
+import { deleteDoc, doc } from "firebase/firestore";
 import { db } from '../firebase';
 
 interface RentalsProps {
@@ -311,7 +311,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
   };
 
   // ✅ CORREÇÃO: SALVAMENTO DE CLIENTE PADRONIZADO E SEM ERRO
-  const handleAddNewCustomer = async (e: React.FormEvent) => {
+  const handleAddNewCustomer = (e: React.FormEvent) => {
     e.preventDefault();
     
     const customerId = `c${Date.now()}`;
@@ -327,26 +327,21 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
       notes: newCustomerData.notes || ''
     };
     
-    try {
-      await setDoc(doc(db, "customers", customerId), newCustomer);
-      setCustomers(prev => [...prev, newCustomer]);
-      
-      // Vincula o cliente novo à reserva atual
-      setFormData(prev => ({ 
-        ...prev, 
-        customerId: customerId, 
-        eventAddress: newCustomer.address 
-      }));
-      
-      // Fecha o mini-form e limpa
-      setIsAddingCustomer(false);
-      setNewCustomerData({ name: '', phone: '', address: '', isCompany: false, cnpj: '', cpf: '', notes: '' });
-      
-      alert("Cliente salvo");
-    } catch (error) {
-      console.error("Erro ao criar cliente:", error);
-      alert("Erro ao salvar cliente no banco de dados.");
-    }
+    // Adiciona o cliente à lista (o App.tsx vai salvar no Firebase automaticamente)
+    setCustomers(prev => [...prev, newCustomer]);
+    
+    // Vincula o cliente novo à reserva atual
+    setFormData(prev => ({ 
+      ...prev, 
+      customerId: customerId, 
+      eventAddress: newCustomer.address 
+    }));
+    
+    // Fecha o mini-form e limpa
+    setIsAddingCustomer(false);
+    setNewCustomerData({ name: '', phone: '', address: '', isCompany: false, cnpj: '', cpf: '', notes: '' });
+    
+    alert("✅ Cliente salvo com sucesso!");
   };
 
   const handleSubmit = (e: React.FormEvent) => {
