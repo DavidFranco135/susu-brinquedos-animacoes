@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Plus, Building2, Users, X, ChevronLeft, ChevronRight, Edit3, Calendar as CalendarIcon, List, CalendarDays, BarChart3, Clock, CheckCircle2, MapPin, UserPlus, FileSpreadsheet, Download, Phone, Share2, MessageCircle, Trash2, ClipboardList, Filter, DollarSign } from 'lucide-react';
+import { Plus, X, ChevronLeft, ChevronRight, Edit3, Calendar as CalendarIcon, List, CalendarDays, BarChart3, Clock, CheckCircle2, MapPin, UserPlus, FileSpreadsheet, Download, Phone, Share2, MessageCircle, Trash2, ClipboardList, Filter, DollarSign, Building2, Users } from 'lucide-react';
 import { Rental, RentalStatus, Customer, Toy, User, UserRole, PaymentMethod } from '../types';
 import { deleteDoc, doc } from "firebase/firestore";
 import { db } from '../firebase';
@@ -19,6 +19,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
   const [viewTab, setViewTab] = useState<'Mês' | 'Ano' | 'Lista'>('Mês');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedCategory, setSelectedCategory] = useState<string>('TODAS');
+  const [isAddingCustomer, setIsAddingCustomer] = useState(false);
 
   const userStr = localStorage.getItem('susu_user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
@@ -42,19 +43,19 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
     additionalServiceValue: 0
   });
 
+  const [newCustomerData, setNewCustomerData] = useState<Partial<Customer>>({ 
+    name: '', 
+    phone: '', 
+    address: '', 
+    isCompany: false, 
+    cnpj: '',
+    cpf: '',
+    notes: '' 
+  });
+
   // Estado para controlar quantidade de cada brinquedo
   const [toyQuantities, setToyQuantities] = useState<{[key: string]: number}>({});
-// ✅ NOVO: Estado para controlar modal de novo cliente
-const [isNewCustomerModalOpen, setIsNewCustomerModalOpen] = useState(false);
-const [newCustomerData, setNewCustomerData] = useState<Partial<Customer>>({
-  name: '',
-  phone: '',
-  address: '',
-  isCompany: false,
-  cnpj: '',
-  cpf: '',
-  notes: ''
-});
+
   const handleOpenModal = (rental?: Rental) => {
     if (rental) {
       setEditingRental(rental);
@@ -82,6 +83,7 @@ const [newCustomerData, setNewCustomerData] = useState<Partial<Customer>>({
       });
       setToyQuantities({});
     }
+    setIsAddingCustomer(false);
     setIsModalOpen(true);
   };
 
@@ -151,666 +153,533 @@ const [newCustomerData, setNewCustomerData] = useState<Partial<Customer>>({
       display: element.style.display,
       position: element.style.position,
       left: element.style.left,
-      width: element.style.width,
-      maxWidth: element.style.maxWidth,
-      transform: element.style.transform,
-      overflow: element.style.overflow
+      top: element.style.top,
+      width: element.style.width
     };
     
-    element.classList.remove('hidden');
     element.style.display = 'block';
     element.style.position = 'absolute';
     element.style.left = '-9999px';
     element.style.top = '0';
-    element.style.width = '794px';
-    element.style.maxWidth = '794px';
-    element.style.transform = 'scale(1)';
-    element.style.overflow = 'visible';
     
-    await new Promise(resolve => setTimeout(resolve, isMobile ? 1000 : 500));
+    if (isMobile) {
+      element.style.width = '800px';
+    } else {
+      element.style.width = '1200px';
+    }
     
-    const { jsPDF } = (window as any).jspdf;
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
-      const canvas = await (window as any).html2canvas(element, { 
+      const canvas = await (window as any).html2canvas(element, {
         scale: isMobile ? 2 : 3,
         useCORS: true,
-        logging: false,
-        width: 794,
-        windowWidth: 794,
-        windowHeight: element.scrollHeight,
-        scrollY: -window.scrollY,
-        scrollX: -window.scrollX,
         allowTaint: true,
         backgroundColor: '#ffffff',
-        removeContainer: true,
-        imageTimeout: 0,
-        onclone: (clonedDoc: any) => {
-          const clonedElement = clonedDoc.getElementById(elementId);
-          if (clonedElement) {
-            clonedElement.querySelectorAll('button, .no-print').forEach((el: any) => el.remove());
-            clonedElement.style.fontSmoothing = 'antialiased';
-            clonedElement.style.webkitFontSmoothing = 'antialiased';
-            
-            const textElements = clonedElement.querySelectorAll('p, span, div, h1, h2, h3, h4, h5, h6');
-            textElements.forEach((el: any) => {
-              el.style.wordBreak = 'normal';
-              el.style.overflowWrap = 'normal';
-              el.style.whiteSpace = 'normal';
-            });
-          }
-        }
+        logging: false,
+        width: isMobile ? 800 : 1200,
+        height: element.scrollHeight
       });
       
       const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = 210;
-      const pdfHeight = 297;
-      const imgWidth = pdfWidth;
-      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+      const { jsPDF } = (window as any).jspdf;
       
-      let heightLeft = imgHeight;
-      let position = 0;
-      
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-      heightLeft -= pdfHeight;
-      
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-        heightLeft -= pdfHeight;
-      }
-      
-      if (isMobile) {
-        const pdfBlob = pdf.output('blob');
-        const url = URL.createObjectURL(pdfBlob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename + '.pdf';
-        link.click();
-        URL.revokeObjectURL(url);
-      } else {
-        pdf.save(filename + '.pdf');
-      }
-      
-      loadingDiv.innerHTML = '<div class="bg-white rounded-3xl p-8 text-center space-y-4"><div class="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto"><svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div><p class="font-black text-slate-800 text-sm uppercase tracking-widest">PDF Gerado!</p></div>';
-      
-      setTimeout(() => loadingDiv.remove(), 1500);
-      
-    } catch (err) {
-      console.error("PDF Error:", err);
-      
-      loadingDiv.innerHTML = '<div class="bg-white rounded-3xl p-8 text-center space-y-4 max-w-sm"><div class="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto"><svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg></div><p class="font-black text-slate-800 text-sm uppercase tracking-widest">Erro ao gerar PDF</p><p class="text-xs text-slate-400">Tente novamente ou use um navegador diferente</p><button onclick="document.getElementById(\'pdf-loading\').remove()" class="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold text-xs uppercase">Fechar</button></div>';
-      
-    } finally {
-      Object.keys(originalStyles).forEach(key => {
-        (element.style as any)[key] = originalStyles[key as keyof typeof originalStyles];
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
       });
       
-      if (element.classList.contains('hidden')) {
-        element.classList.add('hidden');
-      }
-    }
-  };
-
-  const handleDownloadReportPDF = () => {
-    const period = viewTab === 'Mês' 
-      ? currentDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })
-      : currentDate.getFullYear();
-    handleDownloadPDFUniversal('rentals-report-print', 'Relatorio-Reservas-' + period);
-  };
-
-  const handleCompleteEvent = (rental: Rental) => {
-    const pending = rental.totalValue - rental.entryValue;
-    const msg = pending > 0 
-      ? 'Concluir este evento? O saldo de R$ ' + pending.toLocaleString('pt-BR') + ' será marcado como PAGO e entrará no financeiro.'
-      : 'Marcar este evento como concluído?';
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const margin = 10;
       
-    if (!confirm(msg)) return;
-    
-    setRentals(prev => prev.map(r => r.id === rental.id ? {
-      ...r,
-      status: RentalStatus.COMPLETED,
-      entryValue: r.totalValue 
-    } : r));
-  };
-
- const handleDeleteRental = async (id: string) => {
-  if (!confirm("Tem certeza que deseja APAGAR esta reserva permanentemente?")) return;
-  
-  try {
-    await deleteDoc(doc(db, "rentals", id));
-    setRentals(prev => prev.filter(r => r.id !== id));
-  } catch (error) {
-    console.error("Erro ao excluir:", error);
-    alert("Erro ao excluir a reserva.");
-  }
-};
-
-  const handleSendWhatsApp = (rental: Rental) => {
-    const customer = customers.find(c => c.id === rental.customerId);
-    if (!customer?.phone) return alert("Cliente sem telefone cadastrado.");
-    
-    const toysNames = toys.filter(t => rental.toyIds.includes(t.id)).map(t => t.name + ' (' + (t.size || 'Unico') + ')').join(', ');
-    const formattedDate = new Date(rental.date + 'T00:00:00').toLocaleDateString('pt-BR');
-    const pending = rental.totalValue - rental.entryValue;
-
-    let message = 
-      '📋 *CONFIRMAÇÃO DE RESERVA - SUSU ANIMAÇÕES*\n\n' +
-      'Olá, *' + rental.customerName + '*! Tudo bem?\n' +
-      'Segue o resumo da sua reserva:\n\n' +
-      '📅 *Data:* ' + formattedDate + '\n' +
-      '⏰ *Horário:* ' + rental.startTime + ' às ' + rental.endTime + '\n' +
-      '📍 *Local:* ' + rental.eventAddress + '\n' +
-      '🎮 *Brinquedos:* ' + toysNames + '\n';
-
-    if (rental.additionalService && rental.additionalServiceValue) {
-      message += '➕ *Adicional:* ' + rental.additionalService + ' - R$ ' + rental.additionalServiceValue.toLocaleString('pt-BR') + '\n';
+      const imgWidth = pageWidth - (margin * 2);
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      if (imgHeight <= pageHeight - (margin * 2)) {
+        pdf.addImage(imgData, 'JPEG', margin, margin, imgWidth, imgHeight);
+      } else {
+        let heightLeft = imgHeight;
+        let position = margin;
+        
+        pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+        heightLeft -= (pageHeight - margin);
+        
+        while (heightLeft > 0) {
+          position = heightLeft - imgHeight + margin;
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', margin, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
+        }
+      }
+      
+      pdf.save(filename);
+      
+    } catch (err) {
+      console.error("Erro ao gerar PDF:", err);
+      alert("Erro ao gerar o relatório. Tente novamente.");
+    } finally {
+      Object.assign(element.style, originalStyles);
+      const loading = document.getElementById('pdf-loading');
+      if (loading) loading.remove();
     }
-
-    message += 
-      '\n💰 *Valor Total:* R$ ' + rental.totalValue.toLocaleString('pt-BR') + '\n' +
-      '💳 *Sinal Pago:* R$ ' + rental.entryValue.toLocaleString('pt-BR') + '\n' +
-      '💵 *Saldo Restante:* *R$ ' + pending.toLocaleString('pt-BR') + '*\n\n' +
-      'Aguardamos você para um dia de muita diversão! 🎉';
-
-    const text = encodeURIComponent(message);
-    const cleanPhone = customer.phone.replace(/\D/g, '');
-    window.open('https://wa.me/55' + cleanPhone + '?text=' + text, '_blank');
   };
 
-  const handleCopyLink = (rental: Rental) => {
-    const baseUrl = window.location.origin + window.location.pathname;
-    const shareUrl = baseUrl + '#/resumo/' + rental.id;
-    
-    navigator.clipboard.writeText(shareUrl).then(() => {
-        alert("Página de resumo gerada e link copiado com sucesso!");
-        window.open(shareUrl, '_blank');
-    });
-  };
-// ✅ NOVA FUNÇÃO: Salvar novo cliente e selecionar automaticamente
-const handleSaveNewCustomer = async (e: React.FormEvent) => {
-  e.preventDefault();
-  
-  const newCustomer: Customer = {
-    id: `c${Date.now()}`,
-    createdAt: new Date().toISOString(),
-    ...newCustomerData as any
-  };
-  
-  try {
-    // Salva no Firestore
-    await setDoc(doc(db, "customers", newCustomer.id), newCustomer);
-    
-    // Atualiza a lista local
+  const handleAddNewCustomer = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newCustomer: Customer = { 
+      id: `c${Date.now()}`, 
+      createdAt: new Date().toISOString(), 
+      ...(newCustomerData as any) 
+    };
     setCustomers(prev => [...prev, newCustomer]);
-    
-    // Seleciona automaticamente o novo cliente
-    setFormData({
-      ...formData,
-      customerId: newCustomer.id,
-      eventAddress: newCustomer.address || ''
-    });
-    
-    // Limpa o formulário e fecha o modal
-    setNewCustomerData({
-      name: '',
-      phone: '',
-      address: '',
-      isCompany: false,
-      cnpj: '',
-      cpf: '',
-      notes: ''
-    });
-    setIsNewCustomerModalOpen(false);
-    
-    alert('✅ Cliente adicionado e selecionado com sucesso!');
-  } catch (error) {
-    console.error('Erro ao salvar cliente:', error);
-    alert('❌ Erro ao salvar o cliente. Tente novamente.');
-  }
-};
+    setFormData(prev => ({ ...prev, customerId: newCustomer.id }));
+    setIsAddingCustomer(false);
+    setNewCustomerData({ name: '', phone: '', address: '', isCompany: false, cnpj: '', cpf: '', notes: '' });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.customerId) return alert("Selecione um cliente");
-
-    const selectedToyIds = formData.toyIds || [];
-    const toysBlocked: string[] = [];
-
-    selectedToyIds.forEach(tid => {
-      const toy = toys.find(t => t.id === tid);
-      if (!toy) return;
-
-      const unitsRented = rentals.filter(r => 
-        r.date === formData.date && 
-        r.toyIds.includes(tid) && 
-        r.status !== RentalStatus.CANCELLED &&
-        r.id !== editingRental?.id
-      ).length;
-
-      if (unitsRented + 1 > toy.quantity) {
-        toysBlocked.push(toy.name);
-      }
-    });
-
-    if (toysBlocked.length > 0) {
-      return alert('🚫 BRINQUEDO INDISPONÍVEL!\n\nOs itens abaixo já atingiram o limite de estoque para o dia ' + new Date(formData.date! + 'T00:00:00').toLocaleDateString('pt-BR') + ':\n\n• ' + toysBlocked.join('\n• '));
+    if (editingRental) {
+      setRentals(prev => prev.map(r => r.id === editingRental.id ? { ...r, ...formData } as Rental : r));
+    } else {
+      const newR: Rental = { 
+        id: `r${Date.now()}`, 
+        createdAt: new Date().toISOString(), 
+        ...(formData as any) 
+      };
+      setRentals(prev => [...prev, newR]);
     }
-    
-    const customer = customers.find(c => c.id === formData.customerId);
-    const newRental: Rental = {
-      id: editingRental?.id || 'r' + Date.now(),
-      customerId: formData.customerId!,
-      customerName: customer?.name || 'Cliente',
-      date: formData.date!,
-      startTime: formData.startTime!,
-      endTime: formData.endTime!,
-      eventAddress: formData.eventAddress || customer?.address || '',
-      toyIds: formData.toyIds || [],
-      totalValue: formData.totalValue || 0,
-      entryValue: Number(formData.entryValue) || 0,
-      paymentMethod: formData.paymentMethod as PaymentMethod,
-      status: formData.status!,
-      additionalService: formData.additionalService || '',
-      additionalServiceValue: Number(formData.additionalServiceValue) || 0
-    };
-
-    setRentals(prev => editingRental ? prev.map(r => r.id === editingRental.id ? newRental : r) : [...prev, newRental]);
     setIsModalOpen(false);
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Deseja realmente excluir esta reserva?")) return;
+    
+    try {
+      await deleteDoc(doc(db, "rentals", id));
+      setRentals(prev => prev.filter(r => r.id !== id));
+    } catch (error) {
+      console.error("Erro ao excluir reserva:", error);
+      alert("Erro ao excluir a reserva. Tente novamente.");
+    }
+  };
+
+  const handleShareRental = async (rental: Rental) => {
+    const customer = customers.find(c => c.id === rental.customerId);
+    const selectedToys = toys.filter(t => rental.toyIds?.includes(t.id));
+    
+    const message = `🎉 *CONFIRMAÇÃO DE RESERVA*\n\n` +
+      `📅 *Data:* ${new Date(rental.date + 'T00:00:00').toLocaleDateString('pt-BR')}\n` +
+      `⏰ *Horário:* ${rental.startTime} às ${rental.endTime}\n` +
+      `📍 *Local:* ${rental.eventAddress}\n\n` +
+      `🎪 *Brinquedos Reservados:*\n${selectedToys.map(t => `• ${t.name}`).join('\n')}\n\n` +
+      `💰 *Valor Total:* R$ ${rental.totalValue?.toFixed(2)}\n` +
+      `✅ *Entrada Paga:* R$ ${rental.entryValue?.toFixed(2)}\n` +
+      `💳 *Forma de Pagamento:* ${rental.paymentMethod}\n\n` +
+      `Acesse o resumo completo: ${window.location.origin}/#/resumo/${rental.id}`;
+    
+    const phoneNumber = customer?.phone?.replace(/\D/g, '');
+    const whatsappUrl = `https://wa.me/55${phoneNumber}?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+  };
+
+  const getRentalStatusBadge = (status: RentalStatus) => {
+    switch(status) {
+      case RentalStatus.PENDING: return <span className="px-4 py-2 bg-yellow-100 text-yellow-700 rounded-2xl text-[10px] font-black uppercase tracking-wider">Pendente</span>;
+      case RentalStatus.CONFIRMED: return <span className="px-4 py-2 bg-green-100 text-green-700 rounded-2xl text-[10px] font-black uppercase tracking-wider">Confirmada</span>;
+      case RentalStatus.COMPLETED: return <span className="px-4 py-2 bg-blue-100 text-blue-700 rounded-2xl text-[10px] font-black uppercase tracking-wider">Concluída</span>;
+      case RentalStatus.CANCELLED: return <span className="px-4 py-2 bg-red-100 text-red-700 rounded-2xl text-[10px] font-black uppercase tracking-wider">Cancelada</span>;
+    }
+  };
+
+  const monthName = currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
   return (
-    <div className="space-y-10 animate-in fade-in duration-500">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 print:hidden">
+    <div className="space-y-6">
+      <header className="flex flex-col md:flex-row justify-between items-center gap-4 print:hidden">
         <div>
-          <h1 className="text-4xl font-black text-slate-800 tracking-tight">Agenda de Eventos</h1>
-          <p className="text-slate-500 font-medium">Controle de logística e agendamentos.</p>
+            <h1 className="text-4xl font-black text-slate-800 tracking-tight">Reservas de Brinquedos</h1>
+            <p className="text-slate-500 font-medium">Controle completo de aluguel de itens.</p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <button onClick={handleDownloadReportPDF} className="flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-600 px-8 py-4 rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
-            <Download size={20} /> Relatório PDF
-          </button>
-          <button onClick={() => handleOpenModal()} className="flex items-center justify-center gap-3 bg-gradient-to-br from-blue-500 to-blue-700 text-white px-8 py-4 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl shadow-blue-100 hover:scale-105 transition-all">
-            <Plus size={20} strokeWidth={3} /> Nova Reserva
-          </button>
+        <div className="flex gap-3">
+            <button onClick={() => handleOpenModal()} className="bg-gradient-to-br from-blue-500 to-blue-700 text-white px-8 py-4 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl shadow-blue-100 hover:scale-105 transition-all">
+                <Plus size={20} className="inline mr-2"/> Nova Reserva
+            </button>
         </div>
       </header>
 
-      <div id="rentals-report-print" className="hidden bg-white p-8 text-slate-900">
-          <div className="border-b-4 border-slate-900 pb-6 mb-6 flex justify-between items-end">
-              <div className="flex items-center gap-6">
-                  <div className="w-20 h-20 rounded-[28px] overflow-hidden border-2 border-slate-900">
-                      {user?.profilePhotoUrl ? <img src={user.profilePhotoUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-100"/>}
-                  </div>
-                  <div>
-                      <h1 className="text-3xl font-black uppercase tracking-tighter">Relatório de Eventos</h1>
-                      <p className="text-base font-bold text-blue-600 uppercase tracking-widest mt-2">
-                        {viewTab === 'Mês' ? currentDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }) : 'Ano ' + currentDate.getFullYear()}
-                      </p>
-                  </div>
-              </div>
-              <div className="text-right">
-                  <p className="text-xs font-black uppercase text-slate-400">Gerado por {user?.name}</p>
-                  <p className="font-bold text-base">{new Date().toLocaleDateString('pt-BR')}</p>
-              </div>
-          </div>
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex-1 bg-white rounded-3xl border p-2 flex gap-2 shadow-sm">
+            <button onClick={() => setViewTab('Mês')} className={`flex-1 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${viewTab === 'Mês' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-50'}`}>
+                <CalendarIcon size={16} className="inline mr-2"/> Mês
+            </button>
+            <button onClick={() => setViewTab('Ano')} className={`flex-1 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${viewTab === 'Ano' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-50'}`}>
+                <CalendarDays size={16} className="inline mr-2"/> Ano
+            </button>
+            <button onClick={() => setViewTab('Lista')} className={`flex-1 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${viewTab === 'Lista' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-50'}`}>
+                <List size={16} className="inline mr-2"/> Lista
+            </button>
+        </div>
 
-          <table className="w-full text-base text-left border-collapse">
-              <thead>
-                  <tr className="border-b-2 border-slate-900 font-black uppercase tracking-wider">
-                      <th className="py-2 px-2">Data/Hora</th>
-                      <th className="py-2 px-2">Cliente</th>
-                      <th className="py-2 px-2">Itens</th>
-                      <th className="py-2 px-2">Local</th>
-                      <th className="py-2 px-2 text-right">Total</th>
-                      <th className="py-2 px-2 text-center">Status</th>
-                  </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                  {filteredRentals.map(r => (
-                      <tr key={r.id}>
-                          <td className="py-2 px-2 font-bold whitespace-nowrap">
-                              {new Date(r.date + 'T00:00:00').toLocaleDateString('pt-BR')}<br/>
-                              <span className="text-sm text-slate-400">{r.startTime}h - {r.endTime}h</span>
-                          </td>
-                          <td className="py-2 px-2 font-black uppercase">{r.customerName}</td>
-                          <td className="py-2 px-2">
-                              {toys.filter(t => r.toyIds.includes(t.id)).map(t => t.name).join(', ')}
-                              {r.additionalService && <><br/><span className="text-blue-600">+ {r.additionalService}</span></>}
-                          </td>
-                          <td className="py-2 px-2 leading-tight max-w-[150px]">{r.eventAddress}</td>
-                          <td className="py-2 px-2 text-right font-black">R$ {r.totalValue.toLocaleString('pt-BR')}</td>
-                          <td className="py-2 px-2 text-center">
-                              <span className={'px-2 py-1 rounded-lg text-xs font-black uppercase ' + (
-                                  r.status === RentalStatus.COMPLETED ? 'bg-emerald-100 text-emerald-700' :
-                                  r.status === RentalStatus.CONFIRMED ? 'bg-blue-100 text-blue-700' :
-                                  r.status === RentalStatus.PENDING ? 'bg-yellow-100 text-yellow-700' :
-                                  'bg-red-100 text-red-700'
-                              )}>{r.status}</span>
-                          </td>
-                      </tr>
-                  ))}
-              </tbody>
-          </table>
-
-          <div className="mt-12 pt-6 border-t border-slate-200 text-right">
-              <p className="text-xs text-slate-400 uppercase font-black">Total de Eventos: {filteredRentals.length}</p>
-              <p className="text-lg font-black text-slate-900">
-                  Faturamento: R$ {filteredRentals.reduce((acc, r) => acc + r.totalValue, 0).toLocaleString('pt-BR')}
-              </p>
-          </div>
+        {viewTab !== 'Lista' && (
+            <div className="bg-white rounded-3xl border p-2 flex items-center gap-4 shadow-sm">
+                <button onClick={() => changeTime(-1)} className="p-3 hover:bg-slate-50 rounded-2xl transition-all text-slate-600"><ChevronLeft size={20}/></button>
+                <p className="font-black text-sm uppercase tracking-widest text-slate-700 min-w-[180px] text-center">{monthName}</p>
+                <button onClick={() => changeTime(1)} className="p-3 hover:bg-slate-50 rounded-2xl transition-all text-slate-600"><ChevronRight size={20}/></button>
+            </div>
+        )}
       </div>
 
-      <div className="flex flex-col md:flex-row gap-6 print:hidden">
-          <div className="flex gap-2 bg-white p-2 rounded-3xl border shadow-sm">
-              {(['Mês', 'Ano', 'Lista'] as const).map(tab => (
-                  <button key={tab} onClick={() => setViewTab(tab)} className={'px-6 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ' + (viewTab === tab ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600')}>
-                      {tab === 'Mês' && <CalendarIcon size={16} className="inline mr-2" />}
-                      {tab === 'Ano' && <BarChart3 size={16} className="inline mr-2" />}
-                      {tab === 'Lista' && <List size={16} className="inline mr-2" />}
-                      {tab}
-                  </button>
-              ))}
-          </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-700 rounded-[40px] p-8 text-white shadow-xl">
+            <div className="flex items-center justify-between">
+                <div>
+                    <p className="text-blue-100 text-[10px] font-black uppercase tracking-widest mb-2">Total de Reservas</p>
+                    <p className="text-5xl font-black">{filteredRentals.length}</p>
+                </div>
+                <div className="p-5 bg-white/20 rounded-3xl"><BarChart3 size={32}/></div>
+            </div>
+        </div>
 
-          {viewTab !== 'Lista' && (
-              <div className="flex items-center gap-4 bg-white p-3 rounded-3xl border shadow-sm">
-                  <button onClick={() => changeTime(-1)} className="p-3 hover:bg-slate-50 rounded-2xl transition-all"><ChevronLeft size={20} className="text-slate-400" /></button>
-                  <span className="font-black text-slate-800 uppercase tracking-wide min-w-[180px] text-center">
-                      {viewTab === 'Mês' ? currentDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }) : currentDate.getFullYear()}
-                  </span>
-                  <button onClick={() => changeTime(1)} className="p-3 hover:bg-slate-50 rounded-2xl transition-all"><ChevronRight size={20} className="text-slate-400" /></button>
-              </div>
-          )}
+        <div className="bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-[40px] p-8 text-white shadow-xl">
+            <div className="flex items-center justify-between">
+                <div>
+                    <p className="text-yellow-100 text-[10px] font-black uppercase tracking-widest mb-2">Pendentes</p>
+                    <p className="text-5xl font-black">{filteredRentals.filter(r => r.status === RentalStatus.PENDING).length}</p>
+                </div>
+                <div className="p-5 bg-white/20 rounded-3xl"><Clock size={32}/></div>
+            </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-green-500 to-green-700 rounded-[40px] p-8 text-white shadow-xl">
+            <div className="flex items-center justify-between">
+                <div>
+                    <p className="text-green-100 text-[10px] font-black uppercase tracking-widest mb-2">Confirmadas</p>
+                    <p className="text-5xl font-black">{filteredRentals.filter(r => r.status === RentalStatus.CONFIRMED).length}</p>
+                </div>
+                <div className="p-5 bg-white/20 rounded-3xl"><CheckCircle2 size={32}/></div>
+            </div>
+        </div>
+
+        <div className="bg-gradient-to-br from-purple-500 to-purple-700 rounded-[40px] p-8 text-white shadow-xl">
+            <div className="flex items-center justify-between">
+                <div>
+                    <p className="text-purple-100 text-[10px] font-black uppercase tracking-widest mb-2">Concluídas</p>
+                    <p className="text-5xl font-black">{filteredRentals.filter(r => r.status === RentalStatus.COMPLETED).length}</p>
+                </div>
+                <div className="p-5 bg-white/20 rounded-3xl"><CalendarIcon size={32}/></div>
+            </div>
+        </div>
       </div>
-      
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredRentals.length === 0 ? (
-              <div className="col-span-full text-center py-20">
-                  <CalendarDays size={64} className="mx-auto text-slate-200 mb-4" />
-                  <p className="text-slate-400 font-bold text-lg">Nenhum evento agendado para este período.</p>
-              </div>
-          ) : (
-              filteredRentals.map(rental => {
-                  const rentalToys = toys.filter(t => rental.toyIds.includes(t.id));
-                  const pending = rental.totalValue - rental.entryValue;
+      <div className="bg-white rounded-[40px] border border-slate-100 overflow-hidden shadow-sm">
+        <table className="w-full text-left">
+          <thead className="bg-slate-50/50 text-[11px] font-black uppercase text-slate-400 tracking-wider">
+            <tr>
+                <th className="px-10 py-5">Cliente</th>
+                <th className="px-8 py-5">Data do Evento</th>
+                <th className="px-8 py-5">Horário</th>
+                <th className="px-8 py-5">Status</th>
+                <th className="px-8 py-5">Valor</th>
+                <th className="px-8 py-5 text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y text-sm">
+            {filteredRentals.length === 0 ? (
+                <tr>
+                    <td colSpan={6} className="px-10 py-16 text-center">
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="p-6 bg-slate-50 rounded-3xl"><CalendarIcon size={48} className="text-slate-300"/></div>
+                            <div>
+                                <p className="font-black text-slate-800 text-lg">Nenhuma reserva encontrada</p>
+                                <p className="text-slate-400 text-sm">Crie uma nova reserva para começar</p>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            ) : (
+                filteredRentals.map(rental => {
+                    const customer = customers.find(c => c.id === rental.customerId);
+                    const selectedToys = toys.filter(t => rental.toyIds?.includes(t.id));
+                    
+                    return (
+                        <tr key={rental.id} className="hover:bg-slate-50/50 transition-colors group">
+                            <td className="px-10 py-6">
+                                <div>
+                                    <p className="font-black text-slate-800 uppercase tracking-tight">{customer?.name || 'Cliente não encontrado'}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter flex items-center gap-2 mt-1">
+                                        <Phone size={10}/> {customer?.phone}
+                                    </p>
+                                </div>
+                            </td>
+                            <td className="px-8 py-6">
+                                <p className="font-black text-slate-700">{new Date(rental.date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                                <p className="text-xs text-slate-400 font-bold mt-1 flex items-center gap-1"><MapPin size={10}/> {rental.eventAddress?.substring(0, 30)}...</p>
+                            </td>
+                            <td className="px-8 py-6">
+                                <p className="font-black text-slate-600">{rental.startTime} - {rental.endTime}</p>
+                            </td>
+                            <td className="px-8 py-6">
+                                {getRentalStatusBadge(rental.status)}
+                            </td>
+                            <td className="px-8 py-6">
+                                <p className="font-black text-emerald-600 text-lg">R$ {rental.totalValue?.toFixed(2)}</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Entrada: R$ {rental.entryValue?.toFixed(2)}</p>
+                            </td>
+                            <td className="px-8 py-6 text-right">
+                                <div className="flex justify-end gap-2">
+                                    <button onClick={() => handleDownloadPDFUniversal(`print-area-${rental.id}`, `resumo-reserva-${rental.id}.pdf`)} className="p-3 bg-slate-100 text-slate-500 hover:bg-purple-600 hover:text-white rounded-2xl transition-all" title="Baixar PDF"><Download size={16}/></button>
+                                    <button onClick={() => handleShareRental(rental)} className="p-3 bg-slate-100 text-emerald-500 hover:bg-emerald-600 hover:text-white rounded-2xl transition-all" title="Compartilhar no WhatsApp"><MessageCircle size={16}/></button>
+                                    <button onClick={() => handleOpenModal(rental)} className="p-3 bg-slate-100 text-blue-500 hover:bg-blue-600 hover:text-white rounded-2xl transition-all" title="Editar"><Edit3 size={16}/></button>
+                                    <button onClick={() => handleDelete(rental.id)} className="p-3 bg-slate-100 text-red-400 hover:bg-red-600 hover:text-white rounded-2xl transition-all" title="Excluir"><Trash2 size={16}/></button>
+                                </div>
+                            </td>
 
-                  return (
-                      <div key={rental.id} className="bg-white rounded-[40px] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl transition-all group">
-                          <div className={'p-6 border-b ' + (
-                              rental.status === RentalStatus.COMPLETED ? 'bg-emerald-50 text-emerald-600' :
-                              rental.status === RentalStatus.CONFIRMED ? 'bg-blue-50 text-blue-600' :
-                              rental.status === RentalStatus.PENDING ? 'bg-yellow-50 text-yellow-600' :
-                              'bg-red-50 text-red-600'
-                          )}>
-                              <div className="flex justify-between items-center">
-                                  <span className="text-[10px] font-black uppercase tracking-widest">{rental.status}</span>
-                                  <span className="text-xs font-bold">#{rental.id.slice(-6).toUpperCase()}</span>
-                              </div>
-                          </div>
+                            {/* ÁREA DE IMPRESSÃO INVISÍVEL */}
+                            <div id={`print-area-${rental.id}`} style={{ display: 'none' }} className="bg-white p-8 text-slate-900">
+                                <div className="border-b-4 border-slate-900 pb-6 mb-6 flex justify-between items-center">
+                                    <div>
+                                        <h1 className="text-3xl font-black uppercase tracking-tight">Resumo da Reserva</h1>
+                                        <p className="text-base font-bold mt-2 uppercase tracking-widest opacity-60">SUSU Animações e Brinquedos</p>
+                                    </div>
+                                    <div className="w-20 h-20 rounded-[28px] overflow-hidden border-2 border-slate-900">
+                                        {user?.profilePhotoUrl ? <img src={user.profilePhotoUrl} className="w-full h-full object-cover" alt="Logo" /> : <div className="w-full h-full bg-slate-100"/>}
+                                    </div>
+                                </div>
 
-                          <div className="p-6 space-y-6">
-                              <div>
-                                  <h3 className="text-xl font-black text-slate-800 mb-1">{rental.customerName}</h3>
-                                  <p className="text-xs text-slate-400 font-bold uppercase flex items-center gap-1"><MapPin size={12}/> {rental.eventAddress}</p>
-                              </div>
+                                <div className="grid grid-cols-2 gap-6 mb-6">
+                                    <div>
+                                        <p className="text-xs font-black uppercase tracking-widest opacity-60 mb-2">Cliente</p>
+                                        <p className="text-xl font-black">{customer?.name}</p>
+                                        <p className="text-sm font-bold mt-1">{customer?.phone}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-black uppercase tracking-widest opacity-60 mb-2">Data e Horário</p>
+                                        <p className="text-xl font-black">{new Date(rental.date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                                        <p className="text-sm font-bold mt-1">{rental.startTime} às {rental.endTime}</p>
+                                    </div>
+                                </div>
 
-                              <div className="grid grid-cols-2 gap-4">
-                                  <div className="space-y-1">
-                                      <p className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1"><CalendarIcon size={10}/> Data</p>
-                                      <p className="font-bold text-slate-800">{new Date(rental.date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
-                                  </div>
-                                  <div className="space-y-1">
-                                      <p className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1"><Clock size={10}/> Horário</p>
-                                      <p className="font-bold text-slate-800">{rental.startTime} - {rental.endTime}</p>
-                                  </div>
-                              </div>
+                                <div className="mb-6">
+                                    <p className="text-xs font-black uppercase tracking-widest opacity-60 mb-2">Local do Evento</p>
+                                    <p className="text-base font-bold">{rental.eventAddress}</p>
+                                </div>
 
-                              <div className="pt-4 border-t border-slate-50">
-                                  <p className="text-[9px] font-black text-slate-400 uppercase mb-2">Itens Locados ({rentalToys.length})</p>
-                                  <div className="flex flex-wrap gap-2">
-                                      {rentalToys.slice(0, 3).map(toy => (
-                                          <span key={toy.id} className="px-3 py-1 bg-slate-50 text-slate-600 rounded-full text-[10px] font-bold">{toy.name}</span>
-                                      ))}
-                                      {rentalToys.length > 3 && <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-bold">+{rentalToys.length - 3}</span>}
-                                  </div>
-                                  {rental.additionalService && rental.additionalServiceValue && rental.additionalServiceValue > 0 && (
-                                      <div className="mt-3 p-3 bg-purple-50 rounded-2xl border border-purple-100">
-                                          <p className="text-[9px] font-black text-purple-400 uppercase mb-1">Adicional</p>
-                                          <p className="text-xs font-bold text-purple-700">{rental.additionalService}</p>
-                                          <p className="text-sm font-black text-purple-600 mt-1">R$ {rental.additionalServiceValue?.toLocaleString('pt-BR')}</p>
-                                      </div>
-                                  )}
-                              </div>
+                                <div className="mb-6">
+                                    <p className="text-xs font-black uppercase tracking-widest opacity-60 mb-3">Brinquedos Reservados</p>
+                                    <div className="space-y-2">
+                                        {selectedToys.map(toy => (
+                                            <div key={toy.id} className="flex justify-between items-center border-b pb-2">
+                                                <span className="font-black">{toy.name}</span>
+                                                <span className="font-bold">R$ {toy.price?.toFixed(2)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
 
-                              <div className="bg-slate-900 rounded-2xl p-4 flex justify-between items-center">
-                                  <div>
-                                      <p className="text-[8px] text-slate-500 font-black uppercase">Total</p>
-                                      <p className="text-xl font-black text-white">R$ {rental.totalValue.toLocaleString('pt-BR')}</p>
-                                  </div>
-                                  {pending > 0 && (
-                                      <div className="text-right">
-                                          <p className="text-[8px] text-yellow-500 font-black uppercase">Pendente</p>
-                                          <p className="text-lg font-black text-yellow-400">R$ {pending.toLocaleString('pt-BR')}</p>
-                                      </div>
-                                  )}
-                              </div>
+                                {rental.additionalService && (
+                                    <div className="mb-6">
+                                        <p className="text-xs font-black uppercase tracking-widest opacity-60 mb-2">Serviço Adicional</p>
+                                        <div className="flex justify-between items-center">
+                                            <span className="font-black">{rental.additionalService}</span>
+                                            <span className="font-bold">R$ {rental.additionalServiceValue?.toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                )}
 
-                              <div className="flex flex-wrap gap-2">
-                                  <button onClick={() => handleSendWhatsApp(rental)} className="flex-1 bg-green-50 text-green-600 py-3 px-4 rounded-2xl font-bold text-xs uppercase hover:bg-green-600 hover:text-white transition-all flex items-center justify-center gap-2">
-                                      <MessageCircle size={14} /> WhatsApp
-                                  </button>
-                                  {rental.status !== RentalStatus.COMPLETED && rental.status !== RentalStatus.CANCELLED && (
-                                      <button onClick={() => handleCompleteEvent(rental)} className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl hover:bg-emerald-600 hover:text-white transition-all" title="Concluir">
-                                          <CheckCircle2 size={16}/>
-                                      </button>
-                                  )}
-                                  <button onClick={() => handleOpenModal(rental)} className="p-3 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-600 hover:text-white transition-all" title="Editar">
-                                      <Edit3 size={16}/>
-                                  </button>
-                                  <button onClick={() => handleCopyLink(rental)} className="p-3 bg-purple-50 text-purple-600 rounded-2xl hover:bg-purple-600 hover:text-white transition-all" title="Compartilhar">
-                                      <Share2 size={16}/>
-                                  </button>
-                                  <button onClick={() => handleDeleteRental(rental.id)} className="p-3 bg-red-50 text-red-400 rounded-2xl hover:bg-red-600 hover:text-white transition-all" title="Excluir">
-                                      <Trash2 size={16}/>
-                                  </button>
-                              </div>
-                          </div>
-                      </div>
-                  );
-              })
-          )}
+                                <div className="border-t-2 border-slate-900 pt-4 mt-6">
+                                    <div className="grid grid-cols-3 gap-4 text-center">
+                                        <div>
+                                            <p className="text-xs font-black uppercase tracking-widest opacity-60 mb-1">Valor Total</p>
+                                            <p className="text-2xl font-black">R$ {rental.totalValue?.toFixed(2)}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-black uppercase tracking-widest opacity-60 mb-1">Entrada Paga</p>
+                                            <p className="text-2xl font-black text-emerald-600">R$ {rental.entryValue?.toFixed(2)}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-black uppercase tracking-widest opacity-60 mb-1">Saldo Restante</p>
+                                            <p className="text-2xl font-black text-orange-600">R$ {((rental.totalValue || 0) - (rental.entryValue || 0)).toFixed(2)}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 border-t pt-3 text-xs font-black uppercase opacity-40 text-center">
+                                    Gerado por {user?.name} em {new Date().toLocaleDateString('pt-BR')}
+                                </div>
+                            </div>
+                        </tr>
+                    );
+                })
+            )}
+          </tbody>
+        </table>
       </div>
 
       {isModalOpen && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 overflow-y-auto">
-              <form onSubmit={handleSubmit} className="bg-white w-full max-w-5xl rounded-[40px] p-10 space-y-8 my-8 shadow-2xl max-h-[95vh] overflow-y-auto">
-                  <div className="flex justify-between items-center sticky top-0 bg-white pb-4 border-b z-10">
-                      <h2 className="text-3xl font-black text-slate-800">{editingRental ? 'Editar Reserva' : 'Nova Reserva'}</h2>
-                      <button type="button" onClick={() => setIsModalOpen(false)} className="p-4 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-2xl transition-all">
-                          <X size={24}/>
-                      </button>
+              <form onSubmit={handleSubmit} className="bg-white w-full max-w-6xl rounded-[40px] p-10 space-y-8 shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
+                  <div className="flex justify-between items-center sticky top-0 bg-white z-10 pb-4">
+                      <h2 className="text-3xl font-black text-slate-800 tracking-tight">{editingRental ? 'Editar Reserva' : 'Nova Reserva'}</h2>
+                      <button type="button" onClick={()=>setIsModalOpen(false)} className="p-4 bg-slate-50 text-slate-400 hover:text-slate-800 rounded-2xl transition-all"><X size={24}/></button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-1">
-    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center justify-between">
-        <span>Cliente</span>
-        <button
-            type="button"
-            onClick={() => setIsNewCustomerModalOpen(true)}
-            className="text-blue-600 hover:text-blue-700 font-black text-xs flex items-center gap-1 hover:underline"
-        >
-            <UserPlus size={14} /> Novo Cliente
-        </button>
-    </label>
-    <select required className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.customerId} onChange={e => {
-        const customer = customers.find(c => c.id === e.target.value);
-        setFormData({...formData, customerId: e.target.value, eventAddress: customer?.address || ''});
-    }}>
-        <option value="">Selecione um cliente...</option>
-        {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-    </select>
-</div>
+                  <div className="p-6 bg-blue-50 rounded-3xl border-2 border-blue-100 space-y-4">
+                      <div className="flex items-center gap-2 text-blue-700">
+                          <UserPlus size={20} />
+                          <h3 className="font-black text-sm uppercase tracking-widest">Informações do Cliente</h3>
+                      </div>
+                      
+                      {!isAddingCustomer ? (
+                          <div className="space-y-3">
+                              <div className="space-y-1">
+                                  <label className="text-[9px] font-black text-blue-400 uppercase tracking-widest ml-1">Selecionar Cliente</label>
+                                  <select required className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.customerId} onChange={e => setFormData({...formData, customerId: e.target.value})}>
+                                      <option value="">Escolha um cliente...</option>
+                                      {customers.map(c => (
+                                          <option key={c.id} value={c.id}>{c.name} - {c.phone}</option>
+                                      ))}
+                                  </select>
+                              </div>
+                              <button 
+                                  type="button" 
+                                  onClick={() => setIsAddingCustomer(true)}
+                                  className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                              >
+                                  <Plus size={18} /> Adicionar Novo Cliente
+                              </button>
+                          </div>
+                      ) : (
+                          <div className="space-y-4 p-4 bg-white rounded-2xl border-2 border-blue-200">
+                              <div className="flex items-center justify-between">
+                                  <h4 className="font-black text-sm text-blue-700 uppercase tracking-widest">Novo Cliente</h4>
+                                  <button 
+                                      type="button" 
+                                      onClick={() => {
+                                          setIsAddingCustomer(false);
+                                          setNewCustomerData({ name: '', phone: '', address: '', isCompany: false, cnpj: '', cpf: '', notes: '' });
+                                      }}
+                                      className="text-slate-400 hover:text-slate-800 transition-all"
+                                  >
+                                      <X size={20} />
+                                  </button>
+                              </div>
+
+                              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-3xl border border-slate-100">
+                                  <label className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl cursor-pointer font-black text-[10px] uppercase tracking-widest transition-all ${!newCustomerData.isCompany ? 'bg-white border border-blue-100 text-blue-600' : 'bg-transparent text-slate-400'}`}>
+                                      <input type="radio" className="hidden" checked={!newCustomerData.isCompany} onChange={()=>setNewCustomerData({...newCustomerData, isCompany: false})} /> Pessoa Física
+                                  </label>
+                                  <label className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl cursor-pointer font-black text-[10px] uppercase tracking-widest transition-all ${newCustomerData.isCompany ? 'bg-white border border-blue-100 text-blue-600' : 'bg-transparent text-slate-400'}`}>
+                                      <input type="radio" className="hidden" checked={newCustomerData.isCompany} onChange={()=>setNewCustomerData({...newCustomerData, isCompany: true})} /> Empresa (PJ)
+                                  </label>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="space-y-1">
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome / Razão Social</label>
+                                      <input required className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold" value={newCustomerData.name} onChange={e=>setNewCustomerData({...newCustomerData, name: e.target.value})} />
+                                  </div>
+
+                                  {newCustomerData.isCompany ? (
+                                      <div className="space-y-1">
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CNPJ</label>
+                                          <input className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold" value={newCustomerData.cnpj} onChange={e=>setNewCustomerData({...newCustomerData, cnpj: e.target.value})} placeholder="00.000.000/0001-00" />
+                                      </div>
+                                  ) : (
+                                      <div className="space-y-1">
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CPF</label>
+                                          <input className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold" value={newCustomerData.cpf} onChange={e=>setNewCustomerData({...newCustomerData, cpf: e.target.value})} placeholder="000.000.000-00" />
+                                      </div>
+                                  )}
+
+                                  <div className="space-y-1">
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">WhatsApp</label>
+                                      <input required className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold" value={newCustomerData.phone} onChange={e=>setNewCustomerData({...newCustomerData, phone: e.target.value})} />
+                                  </div>
+
+                                  <div className="space-y-1">
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Endereço Principal</label>
+                                      <input required className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold" value={newCustomerData.address} onChange={e=>setNewCustomerData({...newCustomerData, address: e.target.value})} />
+                                  </div>
+                              </div>
+
+                              <button 
+                                  type="button"
+                                  onClick={handleAddNewCustomer}
+                                  className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-emerald-700 transition-all"
+                              >
+                                  ✓ Salvar e Selecionar Cliente
+                              </button>
+                          </div>
+                      )}
+                  </div>
+
+                  <div className="p-6 bg-emerald-50 rounded-3xl border-2 border-emerald-100 space-y-4">
+                      <div className="flex items-center gap-2 text-emerald-700">
+                          <CalendarIcon size={20} />
+                          <h3 className="font-black text-sm uppercase tracking-widest">Detalhes do Evento</h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-1">
+                              <label className="text-[9px] font-black text-emerald-400 uppercase tracking-widest ml-1">Data do Evento</label>
+                              <input type="date" required className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-emerald-500/20 outline-none" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+                          </div>
+
+                          <div className="space-y-1">
+                              <label className="text-[9px] font-black text-emerald-400 uppercase tracking-widest ml-1">Hora de Início</label>
+                              <input type="time" required className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-emerald-500/20 outline-none" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} />
+                          </div>
+
+                          <div className="space-y-1">
+                              <label className="text-[9px] font-black text-emerald-400 uppercase tracking-widest ml-1">Hora de Término</label>
+                              <input type="time" required className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-emerald-500/20 outline-none" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} />
+                          </div>
+                      </div>
 
                       <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status da Reserva</label>
-                          <select className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as RentalStatus})}>
-                              {Object.values(RentalStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                          <label className="text-[9px] font-black text-emerald-400 uppercase tracking-widest ml-1">Endereço do Evento</label>
+                          <textarea required rows={2} className="w-full px-6 py-4 bg-white rounded-2xl font-bold resize-none border-0 focus:ring-2 focus:ring-emerald-500/20 outline-none" value={formData.eventAddress} onChange={e => setFormData({...formData, eventAddress: e.target.value})} placeholder="Rua, número, bairro, cidade..." />
+                      </div>
+
+                      <div className="space-y-1">
+                          <label className="text-[9px] font-black text-emerald-400 uppercase tracking-widest ml-1">Status da Reserva</label>
+                          <select className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-emerald-500/20 outline-none" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as RentalStatus})}>
+                              <option value={RentalStatus.PENDING}>Pendente</option>
+                              <option value={RentalStatus.CONFIRMED}>Confirmada</option>
+                              <option value={RentalStatus.COMPLETED}>Concluída</option>
+                              <option value={RentalStatus.CANCELLED}>Cancelada</option>
                           </select>
                       </div>
-
-                      <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Data do Evento</label>
-                          <input type="date" required className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Início</label>
-                              <input type="time" required className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} />
-                          </div>
-                          <div className="space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Término</label>
-                              <input type="time" required className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} />
-                          </div>
-                      </div>
-
-                      <div className="md:col-span-2 space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Endereço do Evento</label>
-                          <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.eventAddress} onChange={e => setFormData({...formData, eventAddress: e.target.value})} placeholder="Local onde será realizado o evento" />
-                      </div>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="p-6 bg-orange-50 rounded-3xl border-2 border-orange-100 space-y-4">
                       <div className="flex items-center justify-between">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Brinquedos e Atrações</label>
-                          
-                          <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-2xl">
-                              <Filter size={14} className="text-slate-400" />
-                              <select 
-                                  className="bg-transparent border-0 font-bold text-xs uppercase text-slate-600 outline-none cursor-pointer"
-                                  value={selectedCategory}
-                                  onChange={e => setSelectedCategory(e.target.value)}
-                              >
-                                  {categories.map(cat => (
-                                      <option key={cat} value={cat}>{cat}</option>
-                                  ))}
-                              </select>
+                          <div className="flex items-center gap-2 text-orange-700">
+                              <ClipboardList size={20} />
+                              <h3 className="font-black text-sm uppercase tracking-widest">Brinquedos Selecionados</h3>
+                          </div>
+                          <div className="flex gap-2">
+                              {categories.map(cat => (
+                                  <button
+                                      key={cat}
+                                      type="button"
+                                      onClick={() => setSelectedCategory(cat)}
+                                      className={`px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedCategory === cat ? 'bg-orange-600 text-white' : 'bg-white text-orange-600 hover:bg-orange-100'}`}
+                                  >
+                                      {cat}
+                                  </button>
+                              ))}
                           </div>
                       </div>
-                    {/* ✅ MODAL DE NOVO CLIENTE */}
-{isNewCustomerModalOpen && (
-  <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-    <form onSubmit={handleSaveNewCustomer} className="bg-white w-full max-w-lg rounded-[40px] p-8 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-      <div className="flex justify-between items-center">
-        <h3 className="text-2xl font-black text-slate-800 tracking-tight">Novo Cliente</h3>
-        <button 
-          type="button" 
-          onClick={() => setIsNewCustomerModalOpen(false)} 
-          className="p-3 bg-slate-50 text-slate-400 hover:text-slate-800 rounded-2xl transition-all"
-        >
-          <X size={20}/>
-        </button>
-      </div>
-      
-      <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-3xl border border-slate-100">
-        <label className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl cursor-pointer font-black text-[10px] uppercase tracking-widest transition-all ${!newCustomerData.isCompany ? 'bg-white border border-blue-100 text-blue-600' : 'bg-transparent text-slate-400'}`}>
-          <input 
-            type="radio" 
-            className="hidden" 
-            checked={!newCustomerData.isCompany} 
-            onChange={() => setNewCustomerData({...newCustomerData, isCompany: false})} 
-          /> 
-          Pessoa Física
-        </label>
-        <label className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl cursor-pointer font-black text-[10px] uppercase tracking-widest transition-all ${newCustomerData.isCompany ? 'bg-white border border-blue-100 text-blue-600' : 'bg-transparent text-slate-400'}`}>
-          <input 
-            type="radio" 
-            className="hidden" 
-            checked={newCustomerData.isCompany} 
-            onChange={() => setNewCustomerData({...newCustomerData, isCompany: true})} 
-          /> 
-          Empresa (PJ)
-        </label>
-      </div>
-
-      <div className="space-y-4">
-        <div className="space-y-1">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-            Nome / Razão Social *
-          </label>
-          <input 
-            required 
-            className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500/20" 
-            value={newCustomerData.name} 
-            onChange={e => setNewCustomerData({...newCustomerData, name: e.target.value})} 
-            placeholder="Digite o nome completo"
-          />
-        </div>
-        
-        {newCustomerData.isCompany ? (
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CNPJ</label>
-            <input 
-              className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500/20" 
-              value={newCustomerData.cnpj} 
-              onChange={e => setNewCustomerData({...newCustomerData, cnpj: e.target.value})} 
-              placeholder="00.000.000/0001-00" 
-            />
-          </div>
-        ) : (
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CPF</label>
-            <input 
-              className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500/20" 
-              value={newCustomerData.cpf} 
-              onChange={e => setNewCustomerData({...newCustomerData, cpf: e.target.value})} 
-              placeholder="000.000.000-00" 
-            />
-          </div>
-        )}
-
-        <div className="space-y-1">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">WhatsApp *</label>
-          <input 
-            required 
-            className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500/20" 
-            value={newCustomerData.phone} 
-            onChange={e => setNewCustomerData({...newCustomerData, phone: e.target.value})} 
-            placeholder="(00) 00000-0000"
-          />
-        </div>
-        
-        <div className="space-y-1">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Endereço Principal *</label>
-          <textarea 
-            required 
-            rows={2} 
-            className="w-full px-6 py-4 bg-slate-50 border-0 rounded-2xl font-bold resize-none outline-none focus:ring-2 focus:ring-blue-500/20" 
-            value={newCustomerData.address} 
-            onChange={e => setNewCustomerData({...newCustomerData, address: e.target.value})} 
-            placeholder="Rua, número, bairro, cidade"
-          />
-        </div>
-      </div>
-
-      <button 
-        type="submit" 
-        className="w-full bg-blue-600 text-white py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl hover:bg-blue-700 transition-all"
-      >
-        ✨ Salvar e Selecionar Cliente
-      </button>
-    </form>
-  </div>
-)}
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto p-4 bg-slate-50 rounded-3xl">
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[400px] overflow-y-auto p-2">
                           {filteredToys.length === 0 ? (
-                              <div className="col-span-full text-center py-10 text-slate-400 font-bold">
-                                  Nenhum brinquedo nesta categoria
+                              <div className="col-span-full text-center py-8">
+                                  <p className="text-slate-400 font-bold">Nenhum brinquedo cadastrado</p>
                               </div>
                           ) : (
                               filteredToys.map(toy => {
@@ -818,32 +687,33 @@ const handleSaveNewCustomer = async (e: React.FormEvent) => {
                                   const quantity = toyQuantities[toy.id] || 1;
                                   
                                   return (
-                                      <div key={toy.id} className={'rounded-2xl transition-all border-2 overflow-hidden ' + (isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-white border-transparent')}>
-                                          <label className="flex items-center gap-3 p-4 cursor-pointer">
-                                              <input type="checkbox" className="hidden" checked={isSelected} onChange={() => {
-                                                  const newToyIds = isSelected 
-                                                      ? formData.toyIds?.filter(id => id !== toy.id) 
-                                                      : [...(formData.toyIds || []), toy.id];
-                                                  
-                                                  if (!isSelected) {
-                                                      // Ao selecionar, inicializa quantidade como 1
-                                                      setToyQuantities({...toyQuantities, [toy.id]: 1});
-                                                  } else {
-                                                      // Ao desselecionar, remove a quantidade
-                                                      const newQuantities = {...toyQuantities};
-                                                      delete newQuantities[toy.id];
-                                                      setToyQuantities(newQuantities);
-                                                  }
-                                                  
-                                                  setFormData({...formData, toyIds: newToyIds});
-                                              }} />
+                                      <div key={toy.id} className={`rounded-3xl overflow-hidden border-2 transition-all ${isSelected ? 'border-orange-500 bg-orange-600' : 'border-slate-200 bg-white hover:border-orange-300'}`}>
+                                          <label className={`flex items-start gap-4 p-4 cursor-pointer ${isSelected ? 'text-white' : ''}`}>
+                                              <input 
+                                                  type="checkbox" 
+                                                  className="hidden"
+                                                  checked={isSelected}
+                                                  onChange={() => {
+                                                      if (isSelected) {
+                                                          setFormData({...formData, toyIds: formData.toyIds?.filter(id => id !== toy.id)});
+                                                          const newQtys = {...toyQuantities};
+                                                          delete newQtys[toy.id];
+                                                          setToyQuantities(newQtys);
+                                                      } else {
+                                                          setFormData({...formData, toyIds: [...(formData.toyIds || []), toy.id]});
+                                                          setToyQuantities({...toyQuantities, [toy.id]: 1});
+                                                      }
+                                                  }}
+                                              />
                                               
-                                              <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0">
-                                                  <img src={toy.imageUrl} className="w-full h-full object-cover" alt={toy.name} />
-                                              </div>
+                                              {toy.imageUrl && (
+                                                  <div className="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 bg-slate-100">
+                                                      <img src={toy.imageUrl} alt={toy.name} className="w-full h-full object-cover" />
+                                                  </div>
+                                              )}
                                               
-                                              <div className="flex-1 min-w-0">
-                                                  <p className="font-bold text-sm truncate">{toy.name}</p>
+                                              <div className="flex-1">
+                                                  <p className={'font-black text-sm mb-1 ' + (isSelected ? 'text-white' : 'text-slate-800')}>{toy.name}</p>
                                                   <p className={'text-xs ' + (isSelected ? 'text-blue-100' : 'text-slate-400')}>{toy.size || 'Padrão'}</p>
                                                   <p className={'text-sm font-black mt-1 ' + (isSelected ? 'text-white' : 'text-slate-700')}>R$ {toy.price.toFixed(2)}</p>
                                               </div>
@@ -856,7 +726,7 @@ const handleSaveNewCustomer = async (e: React.FormEvent) => {
                                       </label>
                                       
                                       {isSelected && (
-                                          <div className="px-4 pb-4 flex items-center justify-between gap-3 border-t border-blue-500/20 pt-3 mt-1">
+                                          <div className="px-4 pb-4 flex items-center justify-between gap-3 border-t border-orange-500/20 pt-3 mt-1">
                                               <span className="text-xs font-bold text-white opacity-80">Quantidade:</span>
                                               <div className="flex items-center gap-2">
                                                   <button
@@ -882,7 +752,7 @@ const handleSaveNewCustomer = async (e: React.FormEvent) => {
                                                               setToyQuantities({...toyQuantities, [toy.id]: val});
                                                           }
                                                       }}
-                                                      className="w-16 h-8 rounded-lg bg-white text-blue-600 text-center font-black text-sm border-0 outline-none"
+                                                      className="w-16 h-8 rounded-lg bg-white text-orange-600 text-center font-black text-sm border-0 outline-none"
                                                   />
                                                   <button
                                                       type="button"
