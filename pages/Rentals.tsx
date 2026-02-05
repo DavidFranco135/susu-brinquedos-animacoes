@@ -58,6 +58,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
   });
 
   const [toyQuantities, setToyQuantities] = useState<{[key: string]: number}>({});
+  const [toyCustomPrices, setToyCustomPrices] = useState<{[key: string]: number}>({});
 
   const handleOpenModal = (rental?: Rental) => {
     if (rental) {
@@ -68,6 +69,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
         quantities[id] = 1;
       });
       setToyQuantities(quantities);
+      setToyCustomPrices({});
     } else {
       setEditingRental(null);
       setFormData({
@@ -84,6 +86,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
         additionalServiceValue: 0
       });
       setToyQuantities({});
+      setToyCustomPrices({});
     }
     setIsAddingCustomer(false);
     setIsModalOpen(true);
@@ -156,7 +159,8 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
     const selectedToys = toys.filter(t => formData.toyIds?.includes(t.id));
     const toysTotal = selectedToys.reduce((acc, t) => {
       const qty = toyQuantities[t.id] || 1;
-      return acc + ((t.price || 0) * qty);
+      const price = toyCustomPrices[t.id] !== undefined ? toyCustomPrices[t.id] : t.price;
+      return acc + ((price || 0) * qty);
     }, 0);
     const additionalValue = Number(formData.additionalServiceValue) || 0;
     const total = toysTotal + additionalValue;
@@ -164,7 +168,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
     if (total !== formData.totalValue) {
       setFormData(prev => ({ ...prev, totalValue: total }));
     }
-  }, [formData.toyIds, toyQuantities, formData.additionalServiceValue, toys]);
+  }, [formData.toyIds, toyQuantities, toyCustomPrices, formData.additionalServiceValue, toys]);
 
   const handleDownloadPDFUniversal = async (elementId: string, filename: string) => {
     const element = document.getElementById(elementId);
@@ -811,6 +815,8 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
                               filteredToys.map(toy => {
                                   const isSelected = formData.toyIds?.includes(toy.id);
                                   const quantity = toyQuantities[toy.id] || 1;
+                                  const customPrice = toyCustomPrices[toy.id];
+                                  const currentPrice = customPrice !== undefined ? customPrice : toy.price;
                                   
                                   return (
                                       <div key={toy.id} className={`rounded-3xl overflow-hidden transition-all ${isSelected ? 'bg-blue-600 border-2 border-blue-600' : 'bg-white border-2 border-slate-200 hover:border-blue-300'}`}>
@@ -825,6 +831,9 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
                                                           const newQtys = {...toyQuantities};
                                                           delete newQtys[toy.id];
                                                           setToyQuantities(newQtys);
+                                                          const newPrices = {...toyCustomPrices};
+                                                          delete newPrices[toy.id];
+                                                          setToyCustomPrices(newPrices);
                                                       } else {
                                                           setFormData({...formData, toyIds: [...(formData.toyIds || []), toy.id]});
                                                           setToyQuantities({...toyQuantities, [toy.id]: 1});
@@ -846,50 +855,78 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
                                           </label>
                                           
                                           {isSelected && (
-                                              <div className="px-4 pb-4 flex items-center justify-between gap-3 border-t border-blue-500/20 pt-3">
-                                                  <span className="text-xs font-bold text-white opacity-80">Qtd:</span>
-                                                  <div className="flex items-center gap-2">
-                                                      <button
-                                                          type="button"
-                                                          onClick={(e) => {
-                                                              e.preventDefault();
-                                                              if (quantity > 1) {
-                                                                  setToyQuantities({...toyQuantities, [toy.id]: quantity - 1});
-                                                              }
-                                                          }}
-                                                          className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center font-black text-white transition-all text-sm"
-                                                      >
-                                                          -
-                                                      </button>
-                                                      <input
-                                                          type="number"
-                                                          min="1"
-                                                          max={toy.quantity}
-                                                          value={quantity}
-                                                          onChange={(e) => {
-                                                              const val = parseInt(e.target.value) || 1;
-                                                              if (val >= 1 && val <= toy.quantity) {
-                                                                  setToyQuantities({...toyQuantities, [toy.id]: val});
-                                                              }
-                                                          }}
-                                                          className="w-14 h-7 rounded-lg bg-white text-blue-600 text-center font-black text-sm border-0 outline-none"
-                                                      />
-                                                      <button
-                                                          type="button"
-                                                          onClick={(e) => {
-                                                              e.preventDefault();
-                                                              if (quantity < toy.quantity) {
-                                                                  setToyQuantities({...toyQuantities, [toy.id]: quantity + 1});
-                                                              }
-                                                          }}
-                                                          className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center font-black text-white transition-all text-sm"
-                                                      >
-                                                          +
-                                                      </button>
+                                              <div className="px-4 pb-4 space-y-3 border-t border-blue-500/20 pt-3">
+                                                  {/* Quantidade */}
+                                                  <div className="flex items-center justify-between gap-3">
+                                                      <span className="text-xs font-bold text-white opacity-80">Qtd:</span>
+                                                      <div className="flex items-center gap-2">
+                                                          <button
+                                                              type="button"
+                                                              onClick={(e) => {
+                                                                  e.preventDefault();
+                                                                  if (quantity > 1) {
+                                                                      setToyQuantities({...toyQuantities, [toy.id]: quantity - 1});
+                                                                  }
+                                                              }}
+                                                              className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center font-black text-white transition-all text-sm"
+                                                          >
+                                                              -
+                                                          </button>
+                                                          <input
+                                                              type="number"
+                                                              min="1"
+                                                              max={toy.quantity}
+                                                              value={quantity}
+                                                              onChange={(e) => {
+                                                                  const val = parseInt(e.target.value) || 1;
+                                                                  if (val >= 1 && val <= toy.quantity) {
+                                                                      setToyQuantities({...toyQuantities, [toy.id]: val});
+                                                                  }
+                                                              }}
+                                                              className="w-14 h-7 rounded-lg bg-white text-blue-600 text-center font-black text-sm border-0 outline-none"
+                                                          />
+                                                          <button
+                                                              type="button"
+                                                              onClick={(e) => {
+                                                                  e.preventDefault();
+                                                                  if (quantity < toy.quantity) {
+                                                                      setToyQuantities({...toyQuantities, [toy.id]: quantity + 1});
+                                                                  }
+                                                              }}
+                                                              className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center font-black text-white transition-all text-sm"
+                                                          >
+                                                              +
+                                                          </button>
+                                                      </div>
                                                   </div>
-                                                  <span className="text-xs font-bold text-white opacity-80">
-                                                      = R$ {(toy.price * quantity).toFixed(2)}
-                                                  </span>
+                                                  
+                                                  {/* Preço Customizado */}
+                                                  <div className="flex items-center justify-between gap-2">
+                                                      <span className="text-xs font-bold text-white opacity-80">Valor:</span>
+                                                      <div className="flex items-center gap-2">
+                                                          <span className="text-xs font-bold text-white opacity-60">R$</span>
+                                                          <input
+                                                              type="number"
+                                                              step="0.01"
+                                                              min="0"
+                                                              value={currentPrice}
+                                                              onChange={(e) => {
+                                                                  const val = parseFloat(e.target.value) || 0;
+                                                                  setToyCustomPrices({...toyCustomPrices, [toy.id]: val});
+                                                              }}
+                                                              className="w-20 h-7 rounded-lg bg-white text-blue-600 text-center font-black text-sm border-0 outline-none px-2"
+                                                              placeholder={toy.price.toFixed(2)}
+                                                          />
+                                                      </div>
+                                                  </div>
+                                                  
+                                                  {/* Total */}
+                                                  <div className="flex items-center justify-between pt-2 border-t border-white/20">
+                                                      <span className="text-xs font-bold text-white opacity-80">Total:</span>
+                                                      <span className="text-sm font-black text-white">
+                                                          R$ {(currentPrice * quantity).toFixed(2)}
+                                                      </span>
+                                                  </div>
                                               </div>
                                           )}
                                       </div>
