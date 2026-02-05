@@ -378,13 +378,21 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
         r.id !== editingRental?.id
       ).length;
 
-      if (unitsRented + 1 > toy.quantity) {
+      // Se atingiu o limite de estoque, adiciona na lista de aviso
+      if (unitsRented >= toy.quantity) {
         toysBlocked.push(toy.name);
       }
     });
 
+    // Se houver conflito, apenas avisa e pede confirmação para prosseguir
     if (toysBlocked.length > 0) {
-      return alert('🚫 BRINQUEDO INDISPONÍVEL!\n\nOs itens abaixo já atingiram o limite de estoque para o dia ' + new Date(formData.date! + 'T00:00:00').toLocaleDateString('pt-BR') + ':\n\n• ' + toysBlocked.join('\n• '));
+      const msg = '⚠️ AVISO DE DISPONIBILIDADE\n\n' +
+                  'Os itens abaixo já possuem reservas para o dia ' + 
+                  new Date(formData.date! + 'T00:00:00').toLocaleDateString('pt-BR') + ':\n\n• ' + 
+                  toysBlocked.join('\n• ') + 
+                  '\n\nDeseja confirmar este agendamento mesmo assim?';
+      
+      if (!confirm(msg)) return;
     }
     
     const customer = customers.find(c => c.id === formData.customerId);
