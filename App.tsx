@@ -4,7 +4,8 @@ import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
-  signOut 
+  signOut,
+  onAuthStateChanged // 🔹 ADICIONADO (não quebra nada)
 } from "firebase/auth";
 import { 
   getFirestore, 
