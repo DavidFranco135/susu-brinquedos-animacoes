@@ -130,7 +130,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
       }
       
       return periodMatch && searchMatch;
-    }).sort((a, b) => a.date.localeCompare(b.date)); // ORDENAÇÃO POR DATA ASCENDENTE (mais próxima primeiro)
+    }).sort((a, b) => b.date.localeCompare(a.date));
   }, [rentals, currentDate, viewTab, searchTerm, startDateFilter, endDateFilter, customers]);
 
   const filteredToys = useMemo(() => {
@@ -140,751 +140,729 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
 
   const changeTime = (offset: number) => {
     setCurrentDate(prev => {
-      const newDate = new Date(prev);
-      if (viewTab === 'Mês') {
-        newDate.setMonth(newDate.getMonth() + offset);
-      } else if (viewTab === 'Ano') {
-        newDate.setFullYear(newDate.getFullYear() + offset);
-      }
-      return newDate;
+      const next = new Date(prev);
+      if (viewTab === 'Mês') next.setMonth(next.getMonth() + offset);
+      else if (viewTab === 'Ano') next.setFullYear(next.getFullYear() + offset);
+      return next;
     });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!formData.customerId) {
-      alert('Por favor, selecione ou cadastre um cliente.');
-      return;
-    }
-    if (!formData.date || !formData.startTime || !formData.endTime) {
-      alert('Por favor, preencha data e horários.');
-      return;
-    }
-    if (!formData.toyIds || formData.toyIds.length === 0) {
-      alert('Por favor, selecione pelo menos um brinquedo.');
-      return;
-    }
-
-    const toysData = formData.toyIds.map(id => {
-      const qty = toyQuantities[id] || 1;
-      const toy = toys.find(t => t.id === id);
-      const customPrice = toyCustomPrices[id];
-      const price = customPrice !== undefined && customPrice > 0 ? customPrice : (toy?.price || 0);
-      return { id, quantity: qty, price };
-    });
-
-    const toysTotal = toysData.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const additionalValue = formData.additionalServiceValue || 0;
-    const total = toysTotal + additionalValue;
-
-    const rental: Rental = {
-      id: editingRental?.id || `rental-${Date.now()}`,
-      customerId: formData.customerId || '',
-      customerName: formData.customerName || '',
-      date: formData.date || '',
-      startTime: formData.startTime || '',
-      endTime: formData.endTime || '',
-      status: formData.status || RentalStatus.PENDING,
-      toyIds: formData.toyIds || [],
-      toysData,
-      totalValue: total,
-      entryValue: formData.entryValue || 0,
-      paymentMethod: formData.paymentMethod || 'PIX',
-      eventAddress: formData.eventAddress || '',
-      additionalService: formData.additionalService || '',
-      additionalServiceValue: additionalValue,
-      notes: formData.notes || '',
-    };
-
-    try {
-      await setDoc(doc(db, "rentals", rental.id), rental);
-      
-      setRentals(prev => {
-        const index = prev.findIndex(r => r.id === rental.id);
-        if (index >= 0) {
-          const newRentals = [...prev];
-          newRentals[index] = rental;
-          return newRentals;
-        }
-        return [...prev, rental];
-      });
-      
-      setIsModalOpen(false);
-      setEditingRental(null);
-      setFormData({
-        date: new Date().toISOString().split('T')[0],
-        startTime: '14:00',
-        endTime: '18:00',
-        status: RentalStatus.PENDING,
-        toyIds: [],
-        totalValue: 0,
-        entryValue: 0,
-        paymentMethod: 'PIX',
-        eventAddress: '',
-        additionalService: '',
-        additionalServiceValue: 0
-      });
-      setToyQuantities({});
-      setToyCustomPrices({});
-    } catch (error) {
-      console.error('Erro ao salvar reserva:', error);
-      alert('Erro ao salvar reserva. Tente novamente.');
-    }
-  };
-
-  const handleAddCustomer = async () => {
-    if (!newCustomerData.name || !newCustomerData.phone) {
-      alert('Nome e telefone são obrigatórios');
-      return;
-    }
-    
-    const newCustomer: Customer = {
-      id: `customer-${Date.now()}`,
-      name: newCustomerData.name,
-      phone: newCustomerData.phone,
-      address: newCustomerData.address || '',
-      isCompany: newCustomerData.isCompany || false,
-      cnpj: newCustomerData.cnpj || '',
-      cpf: newCustomerData.cpf || '',
-      notes: newCustomerData.notes || ''
-    };
-
-    try {
-      await setDoc(doc(db, "customers", newCustomer.id), newCustomer);
-      
-      setCustomers(prev => [...prev, newCustomer]);
-      
-      setFormData({...formData, customerId: newCustomer.id, customerName: newCustomer.name});
-      setIsAddingCustomer(false);
-      setNewCustomerData({ 
-        name: '', 
-        phone: '', 
-        address: '', 
-        isCompany: false, 
-        cnpj: '',
-        cpf: '',
-        notes: '' 
-      });
-    } catch (error) {
-      console.error('Erro ao adicionar cliente:', error);
-      alert('Erro ao adicionar cliente. Tente novamente.');
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (window.confirm('Tem certeza que deseja excluir esta reserva?')) {
-      try {
-        await deleteDoc(doc(db, "rentals", id));
-        setRentals(prev => prev.filter(r => r.id !== id));
-      } catch (error) {
-        console.error('Erro ao deletar reserva:', error);
-        alert('Erro ao deletar reserva. Tente novamente.');
-      }
-    }
-  };
-
-  const toggleToySelection = (toyId: string) => {
-    setFormData(prev => {
-      const currentIds = prev.toyIds || [];
-      const isSelected = currentIds.includes(toyId);
-      
-      if (isSelected) {
-        const { [toyId]: _, ...restQuantities } = toyQuantities;
-        setToyQuantities(restQuantities);
-        const { [toyId]: __, ...restPrices } = toyCustomPrices;
-        setToyCustomPrices(restPrices);
-        return { ...prev, toyIds: currentIds.filter(id => id !== toyId) };
-      } else {
-        setToyQuantities({...toyQuantities, [toyId]: 1});
-        return { ...prev, toyIds: [...currentIds, toyId] };
-      }
-    });
-  };
-
-  const getStatusIcon = (status: RentalStatus) => {
-    switch(status) {
-      case RentalStatus.PENDING: return <Clock size={14} className="text-orange-500" />;
-      case RentalStatus.CONFIRMED: return <CheckCircle2 size={14} className="text-green-500" />;
-      case RentalStatus.COMPLETED: return <CheckCircle2 size={14} className="text-blue-500" />;
-      case RentalStatus.CANCELLED: return <X size={14} className="text-red-500" />;
-      default: return null;
-    }
-  };
-
-  const getStatusColor = (status: RentalStatus) => {
-    switch(status) {
-      case RentalStatus.PENDING: return 'bg-gradient-to-br from-orange-400 to-orange-600 text-white';
-      case RentalStatus.CONFIRMED: return 'bg-gradient-to-br from-green-400 to-green-600 text-white';
-      case RentalStatus.COMPLETED: return 'bg-gradient-to-br from-blue-400 to-blue-600 text-white';
-      case RentalStatus.CANCELLED: return 'bg-gradient-to-br from-red-400 to-red-600 text-white';
-      default: return 'bg-gradient-to-br from-gray-400 to-gray-600 text-white';
-    }
-  };
-
-  const getStatusText = (status: RentalStatus) => {
-    switch(status) {
-      case RentalStatus.PENDING: return 'Pendente';
-      case RentalStatus.CONFIRMED: return 'Confirmada';
-      case RentalStatus.COMPLETED: return 'Concluída';
-      case RentalStatus.CANCELLED: return 'Cancelada';
-      default: return status;
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString + 'T00:00:00');
-    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-  };
-
-  const formatShortDate = (dateString: string) => {
-    const date = new Date(dateString + 'T00:00:00');
-    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  };
-
-  const handleChangeStatus = async (rentalId: string, newStatus: RentalStatus) => {
-    try {
-      const rental = rentals.find(r => r.id === rentalId);
-      if (!rental) return;
-      
-      const updatedRental = { ...rental, status: newStatus };
-      await setDoc(doc(db, "rentals", rentalId), updatedRental);
-      
-      setRentals(prev => prev.map(r => r.id === rentalId ? updatedRental : r));
-    } catch (error) {
-      console.error('Erro ao atualizar status:', error);
-      alert('Erro ao atualizar status. Tente novamente.');
-    }
-  };
-
-  const handleShareWhatsApp = (rental: Rental) => {
-    const message = `*Resumo da Reserva*%0A%0A*Cliente:* ${rental.customerName}%0A*Data:* ${formatDate(rental.date)}%0A*Horário:* ${rental.startTime} - ${rental.endTime}%0A*Local:* ${rental.eventAddress}%0A*Total:* R$ ${rental.totalValue.toFixed(2)}%0A%0AVeja mais detalhes em: ${window.location.origin}/#/resumo/${rental.id}`;
-    window.open(`https://wa.me/?text=${message}`, '_blank');
-  };
-
-  const exportToExcel = () => {
-    const data = filteredRentals.map(r => ({
-      Data: r.date,
-      Cliente: r.customerName,
-      Horário: `${r.startTime} - ${r.endTime}`,
-      Local: r.eventAddress,
-      Status: getStatusText(r.status),
-      'Valor Total': r.totalValue,
-      Entrada: r.entryValue,
-      'Forma de Pagamento': r.paymentMethod
-    }));
-    
-    console.log('Exportar para Excel:', data);
-    alert('Funcionalidade de exportação será implementada');
   };
 
   useEffect(() => {
-    if (location.state?.openModal) {
-      handleOpenModal();
+    if (location.state?.preSelectedDate) {
+      setFormData(prev => ({ ...prev, date: location.state.preSelectedDate }));
+      if (location.state?.openModal) setIsModalOpen(true);
+      window.history.replaceState({}, document.title);
     }
-  }, [location]);
+  }, [location.state]);
+
+  useEffect(() => {
+    const selectedToys = toys.filter(t => formData.toyIds?.includes(t.id));
+    const toysTotal = selectedToys.reduce((acc, t) => {
+      const qty = toyQuantities[t.id] || 1;
+      const price = toyCustomPrices[t.id] !== undefined ? toyCustomPrices[t.id] : t.price;
+      return acc + ((price || 0) * qty);
+    }, 0);
+    const additionalValue = Number(formData.additionalServiceValue) || 0;
+    const total = toysTotal + additionalValue;
+    
+    if (total !== formData.totalValue) {
+      setFormData(prev => ({ ...prev, totalValue: total }));
+    }
+  }, [formData.toyIds, toyQuantities, toyCustomPrices, formData.additionalServiceValue, toys]);
+
+  const handleDownloadPDFUniversal = async (elementId: string, filename: string) => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    
+    const isMobile = window.innerWidth < 768;
+    
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'pdf-loading';
+    loadingDiv.className = 'fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center';
+    loadingDiv.innerHTML = '<div class="bg-white rounded-3xl p-8 text-center space-y-4"><div class="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div><p class="font-black text-slate-800 text-sm uppercase tracking-widest">Gerando PDF...</p><p class="text-xs text-slate-400">Isso pode levar alguns segundos</p></div>';
+    document.body.appendChild(loadingDiv);
+    
+    const originalStyles = {
+      display: element.style.display,
+      position: element.style.position,
+      left: element.style.left,
+      top: element.style.top,
+      width: element.style.width
+    };
+    
+    element.style.display = 'block';
+    element.style.position = 'absolute';
+    element.style.left = '-9999px';
+    element.style.top = '0';
+    
+    if (isMobile) {
+      element.style.width = '800px';
+    } else {
+      element.style.width = '1200px';
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    try {
+      const canvas = await (window as any).html2canvas(element, {
+        scale: isMobile ? 2 : 3,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: isMobile ? 800 : 1200,
+        height: element.scrollHeight
+      });
+      
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const { jsPDF } = (window as any).jspdf;
+      
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      const imgWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      let heightLeft = imgHeight;
+      let position = 0;
+      
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+      heightLeft -= pdfHeight;
+      
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+        heightLeft -= pdfHeight;
+      }
+      
+      if (isMobile) {
+        const pdfBlob = pdf.output('blob');
+        const url = URL.createObjectURL(pdfBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename + '.pdf';
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        pdf.save(filename + '.pdf');
+      }
+      
+      loadingDiv.innerHTML = '<div class="bg-white rounded-3xl p-8 text-center space-y-4"><div class="w-16 h-16 bg-emerald-500 rounded-full flex items-center justify-center mx-auto"><svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div><p class="font-black text-slate-800 text-sm uppercase tracking-widest">PDF Gerado!</p></div>';
+      
+      setTimeout(() => loadingDiv.remove(), 1500);
+      
+    } catch (err) {
+      console.error("PDF Error:", err);
+      
+      loadingDiv.innerHTML = '<div class="bg-white rounded-3xl p-8 text-center space-y-4 max-w-sm"><div class="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto"><svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12"></path></svg></div><p class="font-black text-slate-800 text-sm uppercase tracking-widest">Erro ao gerar PDF</p><p class="text-xs text-slate-400">Tente novamente ou use um navegador diferente</p><button onclick="document.getElementById(\'pdf-loading\').remove()" class="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold text-xs uppercase">Fechar</button></div>';
+      
+    } finally {
+      Object.keys(originalStyles).forEach(key => {
+        (element.style as any)[key] = originalStyles[key as keyof typeof originalStyles];
+      });
+      
+      if (element.classList.contains('hidden')) {
+        element.classList.add('hidden');
+      }
+    }
+  };
+
+  const handleDownloadReportPDF = () => {
+    const period = viewTab === 'Mês' 
+      ? currentDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })
+      : currentDate.getFullYear();
+    handleDownloadPDFUniversal('rentals-report-print', 'Relatorio-Reservas-' + period);
+  };
+
+  const handleCompleteEvent = (rental: Rental) => {
+    const pending = rental.totalValue - rental.entryValue;
+    const msg = pending > 0 
+      ? 'Concluir este evento? O saldo de R$ ' + pending.toLocaleString('pt-BR') + ' será marcado como PAGO e entrará no financeiro.'
+      : 'Marcar este evento como concluído?';
+      
+    if (!confirm(msg)) return;
+    
+    setRentals(prev => prev.map(r => r.id === rental.id ? {
+      ...r,
+      status: RentalStatus.COMPLETED,
+      entryValue: r.totalValue 
+    } : r));
+  };
+
+ const handleDeleteRental = async (id: string) => {
+  if (!confirm("Tem certeza que deseja APAGAR esta reserva permanentemente?")) return;
+  
+  try {
+    await deleteDoc(doc(db, "rentals", id));
+    setRentals(prev => prev.filter(r => r.id !== id));
+  } catch (error) {
+    console.error("Erro ao excluir:", error);
+    alert("Erro ao excluir a reserva.");
+  }
+};
+
+  const handleSendWhatsApp = (rental: Rental) => {
+    const customer = customers.find(c => c.id === rental.customerId);
+    if (!customer?.phone) return alert("Cliente sem telefone cadastrado.");
+    
+    const toysNames = toys.filter(t => rental.toyIds.includes(t.id)).map(t => t.name + ' (' + (t.size || 'Unico') + ')').join(', ');
+    const formattedDate = new Date(rental.date + 'T00:00:00').toLocaleDateString('pt-BR');
+    const pending = rental.totalValue - rental.entryValue;
+
+    let message = 
+      '📋 *CONFIRMAÇÃO DE RESERVA - SUSU ANIMAÇÕES*\n\n' +
+      'Olá, *' + rental.customerName + '*! Tudo bem?\n' +
+      'Segue o resumo da sua reserva:\n\n' +
+      '📅 *Data:* ' + formattedDate + '\n' +
+      '⏰ *Horário:* ' + rental.startTime + ' às ' + rental.endTime + '\n' +
+      '📍 *Local:* ' + rental.eventAddress + '\n' +
+      '🎮 *Brinquedos:* ' + toysNames + '\n';
+
+    if (rental.additionalService && rental.additionalServiceValue) {
+      message += '➕ *Adicional:* ' + rental.additionalService + ' - R$ ' + rental.additionalServiceValue.toLocaleString('pt-BR') + '\n';
+    }
+
+    message += 
+      '\n💰 *Valor Total:* R$ ' + rental.totalValue.toLocaleString('pt-BR') + '\n' +
+      '💳 *Sinal Pago:* R$ ' + rental.entryValue.toLocaleString('pt-BR') + '\n' +
+      '💵 *Saldo Restante:* *R$ ' + pending.toLocaleString('pt-BR') + '*\n\n' +
+      'Aguardamos você para um dia de muita diversão! 🎉';
+
+    const text = encodeURIComponent(message);
+    const cleanPhone = customer.phone.replace(/\D/g, '');
+    window.open('https://wa.me/55' + cleanPhone + '?text=' + text, '_blank');
+  };
+
+  const handleCopyLink = (rental: Rental) => {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const shareUrl = baseUrl + '#/resumo/' + rental.id;
+    
+    navigator.clipboard.writeText(shareUrl).then(() => {
+        alert("Página de resumo gerada e link copiado com sucesso!");
+        window.open(shareUrl, '_blank');
+    });
+  };
+
+  const handleAddNewCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const newCustomer: Customer = { 
+      id: `c${Date.now()}`, 
+      createdAt: new Date().toISOString(), 
+      ...(newCustomerData as any) 
+    };
+    
+    try {
+      await setDoc(doc(db, "customers", newCustomer.id), newCustomer);
+      setCustomers(prev => [...prev, newCustomer]);
+      setFormData(prev => ({ ...prev, customerId: newCustomer.id, eventAddress: newCustomer.address || '' }));
+      setIsAddingCustomer(false);
+      setNewCustomerData({ name: '', phone: '', address: '', isCompany: false, cnpj: '', cpf: '', notes: '' });
+    } catch (error) {
+      console.error("Erro ao criar cliente:", error);
+      alert("Erro ao criar o cliente. Tente novamente.");
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.customerId) return alert("Selecione um cliente");
+
+    const selectedToyIds = formData.toyIds || [];
+    const conflictDetails: string[] = [];
+
+    selectedToyIds.forEach(tid => {
+      const toy = toys.find(t => t.id === tid);
+      if (!toy) return;
+
+      const conflictingRentals = rentals.filter(r => 
+        r.date === formData.date && 
+        r.toyIds.includes(tid) && 
+        r.status !== RentalStatus.CANCELLED &&
+        r.id !== editingRental?.id
+      );
+
+      if (conflictingRentals.length >= toy.quantity) {
+        conflictingRentals.forEach(conflictRental => {
+          const sameTime = conflictRental.startTime === formData.startTime && conflictRental.endTime === formData.endTime;
+          const timeInfo = sameTime 
+            ? `no MESMO HORÁRIO (${conflictRental.startTime} - ${conflictRental.endTime})`
+            : `em horário diferente (${conflictRental.startTime} - ${conflictRental.endTime})`;
+          
+          conflictDetails.push(`• ${toy.name} - já reservado para "${conflictRental.customerName}" ${timeInfo}`);
+        });
+      }
+    });
+
+    if (conflictDetails.length > 0) {
+      const msg = '⚠️ AVISO DE DISPONIBILIDADE\n\n' +
+                  'Conflitos encontrados para o dia ' + 
+                  new Date(formData.date! + 'T00:00:00').toLocaleDateString('pt-BR') + ':\n\n' + 
+                  conflictDetails.join('\n') + 
+                  '\n\nDeseja confirmar este agendamento mesmo assim?';
+      
+      if (!confirm(msg)) return;
+    }
+    
+    const customer = customers.find(c => c.id === formData.customerId);
+    if (!customer) return alert('Cliente não encontrado');
+
+    if (editingRental) {
+      setRentals(prev => prev.map(r => 
+        r.id === editingRental.id 
+          ? { ...r, ...formData, customerName: customer.name } as Rental
+          : r
+      ));
+    } else {
+      const newRental: Rental = { 
+        id: `r${Date.now()}`, 
+        createdAt: new Date().toISOString(), 
+        customerName: customer.name,
+        ...(formData as any) 
+      };
+      setRentals(prev => [...prev, newRental]);
+    }
+    setIsModalOpen(false);
+  };
 
   return (
-    <div className="p-8 space-y-8 max-w-[2000px] mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="space-y-6">
+      <header className="flex flex-col md:flex-row justify-between items-center gap-4 print:hidden">
         <div>
-          <h1 className="text-4xl font-black text-slate-800 tracking-tight">Reservas</h1>
-          <p className="text-slate-500 font-bold mt-1 text-sm">Gerencie todas as locações</p>
+            <h1 className="text-4xl font-black text-slate-800 tracking-tight">Reservas de Brinquedos</h1>
+            <p className="text-slate-500 font-medium">Controle completo de aluguel de itens.</p>
         </div>
-        
-        <button 
-          onClick={() => handleOpenModal()} 
-          className="bg-gradient-to-br from-blue-500 to-blue-700 text-white px-8 py-4 rounded-3xl font-black flex items-center gap-3 shadow-2xl shadow-blue-100 hover:scale-105 transition-all uppercase tracking-widest text-sm"
-        >
-          <Plus size={20} strokeWidth={3} /> Nova Reserva
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        {(['Mês', 'Ano', 'Lista'] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setViewTab(tab)}
-            className={`px-6 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${
-              viewTab === tab 
-                ? 'bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-xl shadow-blue-100' 
-                : 'bg-white text-slate-600 hover:bg-slate-50 shadow-sm'
-            }`}
-          >
-            {tab === 'Mês' && <CalendarIcon className="inline mr-2" size={16} />}
-            {tab === 'Ano' && <CalendarDays className="inline mr-2" size={16} />}
-            {tab === 'Lista' && <List className="inline mr-2" size={16} />}
-            {tab}
-          </button>
-        ))}
-      </div>
-
-      {viewTab !== 'Lista' && (
-        <div className="flex items-center justify-between bg-white rounded-3xl p-6 shadow-xl">
-          <button onClick={() => changeTime(-1)} className="p-3 hover:bg-slate-50 rounded-2xl transition-all">
-            <ChevronLeft size={24} className="text-slate-600 font-black" />
-          </button>
-          <h2 className="text-2xl font-black text-slate-800 uppercase tracking-widest">
-            {viewTab === 'Mês' 
-              ? currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-              : currentDate.getFullYear()
-            }
-          </h2>
-          <button onClick={() => changeTime(1)} className="p-3 hover:bg-slate-50 rounded-2xl transition-all">
-            <ChevronRight size={24} className="text-slate-600 font-black" />
-          </button>
+        <div className="flex gap-3">
+            <button onClick={handleDownloadReportPDF} className="bg-white border border-slate-200 text-slate-600 px-8 py-4 rounded-3xl font-black text-sm uppercase tracking-widest shadow-sm hover:bg-slate-50 transition-all">
+                <Download size={18} className="inline mr-2"/> Exportar PDF
+            </button>
+            <button onClick={() => handleOpenModal()} className="bg-gradient-to-br from-blue-500 to-blue-700 text-white px-8 py-4 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl shadow-blue-100 hover:scale-105 transition-all">
+                <Plus size={20} className="inline mr-2"/> Nova Reserva
+            </button>
         </div>
-      )}
+      </header>
 
-      {viewTab === 'Lista' && (
-        <div className="bg-white rounded-3xl shadow-xl p-8 space-y-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-              <input
-                type="text"
-                placeholder="Buscar por cliente, CPF, CNPJ ou telefone..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none"
-              />
-            </div>
-            
-            <div className="flex gap-3">
-              <input
-                type="date"
-                value={startDateFilter}
-                onChange={(e) => setStartDateFilter(e.target.value)}
-                className="px-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none"
-                placeholder="Data inicial"
-              />
-              <input
-                type="date"
-                value={endDateFilter}
-                onChange={(e) => setEndDateFilter(e.target.value)}
-                className="px-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none"
-                placeholder="Data final"
-              />
-              <button
-                onClick={exportToExcel}
-                className="px-6 py-4 bg-green-500 text-white rounded-2xl font-black hover:bg-green-600 transition-all flex items-center gap-2"
-              >
-                <Download size={18} /> Excel
-              </button>
-            </div>
+      {/* ÁREA DE IMPRESSÃO */}
+      <div id="rentals-report-print" className="hidden print:block bg-white p-12">
+          <div className="flex justify-between items-start mb-8 border-b-4 border-slate-900 pb-6">
+              <div>
+                  <h1 className="text-4xl font-black uppercase tracking-tight mb-2">Relatório de Reservas</h1>
+                  <p className="text-lg font-bold text-slate-600 uppercase tracking-widest">
+                      {viewTab === 'Mês' && currentDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
+                      {viewTab === 'Ano' && currentDate.getFullYear()}
+                      {viewTab === 'Lista' && 'Todos os Períodos'}
+                  </p>
+              </div>
+              <div className="text-right">
+                  <p className="text-xs font-black uppercase text-slate-400">Gerado por {user?.name}</p>
+                  <p className="font-bold text-base">{new Date().toLocaleDateString('pt-BR')}</p>
+              </div>
           </div>
 
-          <div className="space-y-4">
-            {filteredRentals.length === 0 ? (
-              <div className="text-center py-16 text-slate-400">
-                <ClipboardList size={64} className="mx-auto mb-4 opacity-30" />
-                <p className="font-bold text-lg">Nenhuma reserva encontrada</p>
+          <table className="w-full text-base text-left border-collapse">
+              <thead>
+                  <tr className="border-b-2 border-slate-900 font-black uppercase tracking-wider">
+                      <th className="py-2 px-2">Data/Hora</th>
+                      <th className="py-2 px-2">Cliente</th>
+                      <th className="py-2 px-2">Itens</th>
+                      <th className="py-2 px-2">Local</th>
+                      <th className="py-2 px-2 text-right">Total</th>
+                      <th className="py-2 px-2 text-center">Status</th>
+                  </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                  {filteredRentals.map(r => (
+                      <tr key={r.id}>
+                          <td className="py-2 px-2 font-bold whitespace-nowrap">
+                              {new Date(r.date + 'T00:00:00').toLocaleDateString('pt-BR')}<br/>
+                              <span className="text-sm text-slate-400">{r.startTime}h - {r.endTime}h</span>
+                          </td>
+                          <td className="py-2 px-2 font-black uppercase">{r.customerName}</td>
+                          <td className="py-2 px-2">
+                              {toys.filter(t => r.toyIds.includes(t.id)).map(t => t.name).join(', ')}
+                              {r.additionalService && <><br/><span className="text-blue-600">+ {r.additionalService}</span></>}
+                          </td>
+                          <td className="py-2 px-2 leading-tight max-w-[150px]">{r.eventAddress}</td>
+                          <td className="py-2 px-2 text-right font-black">R$ {r.totalValue.toLocaleString('pt-BR')}</td>
+                          <td className="py-2 px-2 text-center">
+                              <span className={'px-2 py-1 rounded-lg text-xs font-black uppercase ' + (
+                                  r.status === RentalStatus.COMPLETED ? 'bg-emerald-100 text-emerald-700' :
+                                  r.status === RentalStatus.CONFIRMED ? 'bg-blue-100 text-blue-700' :
+                                  r.status === RentalStatus.PENDING ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-red-100 text-red-700'
+                              )}>{r.status}</span>
+                          </td>
+                      </tr>
+                  ))}
+              </tbody>
+          </table>
+
+          <div className="mt-12 pt-6 border-t border-slate-200 text-right">
+              <p className="text-xs text-slate-400 uppercase font-black">Total de Eventos: {filteredRentals.length}</p>
+              <p className="text-lg font-black text-slate-900">
+                  Faturamento: R$ {filteredRentals.reduce((acc, r) => acc + r.totalValue, 0).toLocaleString('pt-BR')}
+              </p>
+          </div>
+      </div>
+
+      {/* BARRA DE BUSCA E FILTROS */}
+      <div className="bg-white rounded-3xl border p-6 shadow-sm print:hidden space-y-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          {/* Campo de Busca */}
+          <div className="flex-1 relative">
+            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Buscar por nome, CPF, CNPJ ou telefone..." 
+              className="w-full pl-16 pr-6 py-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700 text-sm border-0 focus:ring-2 focus:ring-blue-500/20" 
+              value={searchTerm} 
+              onChange={e => setSearchTerm(e.target.value)} 
+            />
+          </div>
+        </div>
+
+        {/* Filtros de Data */}
+        <div className="flex flex-col md:flex-row gap-4 items-end">
+          <div className="flex-1 space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Data Inicial</label>
+            <input 
+              type="date" 
+              className="w-full px-6 py-3 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none text-sm" 
+              value={startDateFilter} 
+              onChange={e => setStartDateFilter(e.target.value)} 
+            />
+          </div>
+          <div className="flex-1 space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Data Final</label>
+            <input 
+              type="date" 
+              className="w-full px-6 py-3 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none text-sm" 
+              value={endDateFilter} 
+              onChange={e => setEndDateFilter(e.target.value)} 
+            />
+          </div>
+          {(startDateFilter || endDateFilter) && (
+            <button 
+              onClick={() => {
+                setStartDateFilter('');
+                setEndDateFilter('');
+              }}
+              className="px-6 py-3 bg-red-50 text-red-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all"
+            >
+              Limpar Filtros
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-6 print:hidden">
+          <div className="flex gap-2 bg-white p-2 rounded-3xl border shadow-sm">
+              {(['Mês', 'Ano', 'Lista'] as const).map(tab => (
+                  <button key={tab} onClick={() => setViewTab(tab)} className={'px-6 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ' + (viewTab === tab ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600')}>
+                      {tab === 'Mês' && <CalendarIcon size={16} className="inline mr-2" />}
+                      {tab === 'Ano' && <BarChart3 size={16} className="inline mr-2" />}
+                      {tab === 'Lista' && <List size={16} className="inline mr-2" />}
+                      {tab}
+                  </button>
+              ))}
+          </div>
+
+          {viewTab !== 'Lista' && (
+              <div className="flex items-center gap-4 bg-white p-3 rounded-3xl border shadow-sm">
+                  <button onClick={() => changeTime(-1)} className="p-3 hover:bg-slate-50 rounded-2xl transition-all"><ChevronLeft size={20} className="text-slate-400" /></button>
+                  <span className="font-black text-slate-800 uppercase tracking-wide min-w-[180px] text-center">
+                      {viewTab === 'Mês' ? currentDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }) : currentDate.getFullYear()}
+                  </span>
+                  <button onClick={() => changeTime(1)} className="p-3 hover:bg-slate-50 rounded-2xl transition-all"><ChevronRight size={20} className="text-slate-400" /></button>
               </div>
-            ) : (
+          )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {filteredRentals.length === 0 ? (
+              <div className="col-span-full text-center py-20">
+                  <CalendarDays size={64} className="mx-auto text-slate-200 mb-4" />
+                  <p className="text-slate-400 font-bold text-lg">Nenhum evento encontrado.</p>
+                  <p className="text-slate-400 text-sm mt-2">Ajuste os filtros ou busca para ver mais resultados.</p>
+              </div>
+          ) : (
               filteredRentals.map(rental => {
-                const customer = customers.find(c => c.id === rental.customerId);
-                const rentalToys = rental.toysData?.map(td => ({
-                  ...toys.find(t => t.id === td.id),
-                  quantity: td.quantity,
-                  customPrice: td.price
-                })).filter(t => t) || [];
+                  const rentalToys = toys.filter(t => rental.toyIds.includes(t.id));
+                  const pending = rental.totalValue - rental.entryValue;
 
-                return (
-                  <div key={rental.id} className="bg-slate-50 rounded-2xl p-6 hover:bg-slate-100 transition-all border-2 border-slate-100">
-                    <div className="flex items-start justify-between gap-6">
-                      <div className="flex-1 space-y-4">
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <h3 className="text-xl font-black text-slate-800">{rental.customerName}</h3>
-                          <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest ${getStatusColor(rental.status)}`}>
-                            {getStatusText(rental.status)}
-                          </span>
-                        </div>
+                  return (
+                      <div key={rental.id} className="bg-white rounded-[40px] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl transition-all group">
+                          <div className={'p-6 border-b ' + (
+                              rental.status === RentalStatus.COMPLETED ? 'bg-emerald-50 text-emerald-600' :
+                              rental.status === RentalStatus.CONFIRMED ? 'bg-blue-50 text-blue-600' :
+                              rental.status === RentalStatus.PENDING ? 'bg-yellow-50 text-yellow-600' :
+                              'bg-red-50 text-red-600'
+                          )}>
+                              <div className="flex justify-between items-center">
+                                  <span className="text-[10px] font-black uppercase tracking-widest">{rental.status}</span>
+                                  <span className="text-xs font-bold">#{rental.id.slice(-6).toUpperCase()}</span>
+                              </div>
+                          </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-                          <div className="flex items-center gap-2 text-slate-600">
-                            <CalendarIcon size={16} className="text-slate-400" />
-                            <span className="font-bold">{formatShortDate(rental.date)}</span>
-                          </div>
-                          
-                          <div className="flex items-center gap-2 text-slate-600">
-                            <Clock size={16} className="text-slate-400" />
-                            <span className="font-bold">{rental.startTime} - {rental.endTime}</span>
-                          </div>
-                          
-                          <div className="flex items-center gap-2 text-slate-600">
-                            <MapPin size={16} className="text-slate-400" />
-                            <span className="font-bold">{rental.eventAddress || 'Não informado'}</span>
-                          </div>
-                          
-                          <div className="flex items-center gap-2 text-slate-600">
-                            <Phone size={16} className="text-slate-400" />
-                            <span className="font-bold">{customer?.phone || 'Não informado'}</span>
-                          </div>
-                        </div>
+                          <div className="p-6 space-y-6">
+                              <div>
+                                  <h3 className="text-xl font-black text-slate-800 mb-1">{rental.customerName}</h3>
+                                  <p className="text-xs text-slate-400 font-bold uppercase flex items-center gap-1"><MapPin size={12}/> {rental.eventAddress}</p>
+                              </div>
 
-                        <div className="flex items-center gap-3 pt-2 border-t border-slate-200">
-                          <DollarSign size={20} className="text-green-600" />
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-2xl font-black text-green-600">
-                              R$ {rental.totalValue.toFixed(2)}
-                            </span>
-                            {rental.entryValue > 0 && (
-                              <span className="text-xs font-bold text-slate-500">
-                                (Entrada: R$ {rental.entryValue.toFixed(2)})
-                              </span>
-                            )}
-                          </div>
-                        </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-1">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1"><CalendarIcon size={10}/> Data</p>
+                                      <p className="font-bold text-slate-800">{new Date(rental.date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                                  </div>
+                                  <div className="space-y-1">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1"><Clock size={10}/> Horário</p>
+                                      <p className="font-bold text-slate-800">{rental.startTime} - {rental.endTime}</p>
+                                  </div>
+                              </div>
 
-                        {rentalToys.length > 0 && (
-                          <div className="pt-2">
-                            <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Brinquedos:</p>
-                            <div className="flex flex-wrap gap-2">
-                              {rentalToys.map((toy: any, idx: number) => (
-                                <span key={idx} className="px-3 py-1 bg-white rounded-full text-xs font-bold text-slate-600 border border-slate-200">
-                                  {toy?.name} {toy?.quantity > 1 && `(${toy?.quantity}x)`}
-                                </span>
-                              ))}
-                            </div>
+                              <div className="pt-4 border-t border-slate-50">
+                                  <p className="text-[9px] font-black text-slate-400 uppercase mb-2">Itens Locados ({rentalToys.length})</p>
+                                  <div className="flex flex-wrap gap-2">
+                                      {rentalToys.slice(0, 3).map(toy => (
+                                          <span key={toy.id} className="px-3 py-1 bg-slate-50 text-slate-600 rounded-full text-[10px] font-bold">{toy.name}</span>
+                                      ))}
+                                      {rentalToys.length > 3 && <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-bold">+{rentalToys.length - 3}</span>}
+                                  </div>
+                                  {rental.additionalService && rental.additionalServiceValue && rental.additionalServiceValue > 0 && (
+                                      <div className="mt-3 p-3 bg-purple-50 rounded-2xl border border-purple-100">
+                                          <p className="text-[9px] font-black text-purple-400 uppercase mb-1">Adicional</p>
+                                          <p className="text-xs font-bold text-purple-700">{rental.additionalService}</p>
+                                          <p className="text-sm font-black text-purple-600 mt-1">R$ {rental.additionalServiceValue?.toLocaleString('pt-BR')}</p>
+                                      </div>
+                                  )}
+                              </div>
+
+                              <div className="bg-slate-900 rounded-2xl p-4 flex justify-between items-center">
+                                  <div>
+                                      <p className="text-[8px] text-slate-500 font-black uppercase">Total</p>
+                                      <p className="text-xl font-black text-white">R$ {rental.totalValue.toLocaleString('pt-BR')}</p>
+                                  </div>
+                                  {pending > 0 && (
+                                      <div className="text-right">
+                                          <p className="text-[8px] text-yellow-500 font-black uppercase">Pendente</p>
+                                          <p className="text-lg font-black text-yellow-400">R$ {pending.toLocaleString('pt-BR')}</p>
+                                      </div>
+                                  )}
+                              </div>
+
+                              <div className="flex flex-wrap gap-2">
+                                  <button onClick={() => handleSendWhatsApp(rental)} className="flex-1 bg-green-50 text-green-600 py-3 px-4 rounded-2xl font-bold text-xs uppercase hover:bg-green-600 hover:text-white transition-all flex items-center justify-center gap-2">
+                                      <MessageCircle size={14} /> WhatsApp
+                                  </button>
+                                  {rental.status !== RentalStatus.COMPLETED && rental.status !== RentalStatus.CANCELLED && (
+                                      <button onClick={() => handleCompleteEvent(rental)} className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl hover:bg-emerald-600 hover:text-white transition-all" title="Concluir">
+                                          <CheckCircle2 size={16}/>
+                                      </button>
+                                  )}
+                                  <button onClick={() => handleOpenModal(rental)} className="p-3 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-600 hover:text-white transition-all" title="Editar">
+                                      <Edit3 size={16}/>
+                                  </button>
+                                  <button onClick={() => handleCopyLink(rental)} className="p-3 bg-purple-50 text-purple-600 rounded-2xl hover:bg-purple-600 hover:text-white transition-all" title="Compartilhar">
+                                      <Share2 size={16}/>
+                                  </button>
+                                  <button onClick={() => handleDeleteRental(rental.id)} className="p-3 bg-red-50 text-red-400 rounded-2xl hover:bg-red-600 hover:text-white transition-all" title="Excluir">
+                                      <Trash2 size={16}/>
+                                  </button>
+                              </div>
                           </div>
-                        )}
                       </div>
-
-                      <div className="flex flex-col gap-2">
-                        <button
-                          onClick={() => handleOpenModal(rental)}
-                          className="px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-xl transition-all font-bold"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => handleShareWhatsApp(rental)}
-                          className="px-4 py-2 text-sm text-green-600 hover:bg-green-50 rounded-xl transition-all font-bold"
-                        >
-                          WhatsApp
-                        </button>
-                        <button
-                          onClick={() => handleDelete(rental.id)}
-                          className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-xl transition-all font-bold"
-                        >
-                          Excluir
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
+                  );
               })
-            )}
-          </div>
-
-          <div className="bg-blue-50 rounded-2xl p-6 border-2 border-blue-100">
-            <div className="flex justify-between items-center text-sm">
-              <span className="font-black text-blue-900 uppercase tracking-widest">
-                Total de reservas: {filteredRentals.length}
-              </span>
-              <span className="font-black text-blue-900 uppercase tracking-widest">
-                Valor total: R$ {filteredRentals.reduce((sum, r) => sum + r.totalValue, 0).toFixed(2)}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {viewTab === 'Mês' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredRentals.map(rental => {
-            const customer = customers.find(c => c.id === rental.customerId);
-            return (
-              <div key={rental.id} className={`${getStatusColor(rental.status)} rounded-[40px] p-8 shadow-2xl relative overflow-hidden group hover:scale-105 transition-all cursor-pointer`} onClick={() => handleOpenModal(rental)}>
-                <div className="absolute top-4 right-4 flex gap-2">
-                  {getStatusIcon(rental.status)}
-                </div>
-                
-                <div className="space-y-6">
-                  <div>
-                    <p className="text-[10px] font-black opacity-70 uppercase tracking-widest mb-1">Cliente</p>
-                    <h3 className="font-black text-xl tracking-tight">{rental.customerName}</h3>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div>
-                      <p className="font-black opacity-70 uppercase tracking-widest mb-1">Data</p>
-                      <p className="font-bold">{new Date(rental.date + 'T00:00:00').toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}</p>
-                    </div>
-                    <div>
-                      <p className="font-black opacity-70 uppercase tracking-widest mb-1">Horário</p>
-                      <p className="font-bold">{rental.startTime}</p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-[10px] font-black opacity-70 uppercase tracking-widest mb-1">Local</p>
-                    <p className="font-bold text-sm truncate">{rental.eventAddress}</p>
-                  </div>
-
-                  <div className="pt-4 border-t border-white/20">
-                    <p className="text-[10px] font-black opacity-70 uppercase tracking-widest mb-1">Valor Total</p>
-                    <p className="text-2xl font-black">R$ {rental.totalValue.toFixed(2)}</p>
-                  </div>
-                </div>
-
-                <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-all">
-                  <Edit3 size={20} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {viewTab === 'Ano' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Array.from({length: 12}, (_, i) => {
-            const monthDate = new Date(currentDate.getFullYear(), i, 1);
-            const monthRentals = rentals.filter(r => {
-              const rentalDate = new Date(r.date + 'T00:00:00');
-              return rentalDate.getMonth() === i && rentalDate.getFullYear() === currentDate.getFullYear();
-            });
-            const monthTotal = monthRentals.reduce((sum, r) => sum + r.totalValue, 0);
-
-            return (
-              <div key={i} className="bg-white rounded-3xl p-6 shadow-xl hover:shadow-2xl transition-all">
-                <h3 className="font-black text-lg text-slate-800 mb-4 uppercase tracking-widest">
-                  {monthDate.toLocaleDateString('pt-BR', { month: 'long' })}
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Reservas</span>
-                    <span className="text-2xl font-black text-blue-600">{monthRentals.length}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Total</span>
-                    <span className="text-lg font-black text-green-600">R$ {monthTotal.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+          )}
+      </div>
 
       {isModalOpen && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-              <div className="bg-gradient-to-br from-slate-50 to-white rounded-[50px] w-full max-w-6xl my-8 shadow-2xl border-4 border-white/50 max-h-[90vh] overflow-y-auto">
-                  <div className="sticky top-0 bg-gradient-to-br from-blue-500 to-blue-700 text-white p-8 rounded-t-[46px] flex justify-between items-center z-10 shadow-xl">
-                      <h2 className="text-3xl font-black uppercase tracking-widest">{editingRental ? 'Editar Reserva' : 'Nova Reserva'}</h2>
-                      <button onClick={() => setIsModalOpen(false)} className="p-3 hover:bg-white/20 rounded-2xl transition-all">
-                          <X size={28} strokeWidth={3} />
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 overflow-y-auto">
+              <form onSubmit={handleSubmit} className="bg-white w-full max-w-5xl rounded-[40px] p-10 space-y-8 my-8 shadow-2xl max-h-[95vh] overflow-y-auto">
+                  <div className="flex justify-between items-center sticky top-0 bg-white pb-4 border-b z-10">
+                      <h2 className="text-3xl font-black text-slate-800">{editingRental ? 'Editar Reserva' : 'Nova Reserva'}</h2>
+                      <button type="button" onClick={() => setIsModalOpen(false)} className="p-4 bg-slate-50 text-slate-400 hover:text-slate-600 rounded-2xl transition-all">
+                          <X size={24}/>
                       </button>
                   </div>
 
-              <form onSubmit={handleSubmit} className="p-8 space-y-8">
-                  <div className="bg-gradient-to-br from-blue-50 to-purple-50 p-6 rounded-3xl border-2 border-blue-100 space-y-4">
-                      <div className="flex items-center gap-2 text-blue-700">
-                          <Users size={20} />
-                          <h3 className="font-black text-sm uppercase tracking-widest">Informações do Cliente</h3>
-                      </div>
-                      
-                      {!isAddingCustomer ? (
-                          <div className="space-y-4">
-                              <div className="space-y-1">
-                                  <label className="text-[9px] font-black text-blue-400 uppercase tracking-widest ml-1">Selecione o Cliente</label>
-                                  <select 
-                                      className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" 
-                                      value={formData.customerId || ''} 
-                                      onChange={e => {
-                                          const customer = customers.find(c => c.id === e.target.value);
-                                          setFormData({...formData, customerId: e.target.value, customerName: customer?.name || ''});
-                                      }}
-                                      required
-                                  >
-                                      <option value="">Selecionar...</option>
-                                      {customers.map(c => (
-                                          <option key={c.id} value={c.id}>{c.name} {c.isCompany ? '(Empresa)' : ''}</option>
-                                      ))}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cliente</label>
+                          {!isAddingCustomer ? (
+                              <div className="flex gap-2">
+                                  <select required className="flex-1 px-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.customerId} onChange={e => {
+                                      const customer = customers.find(c => c.id === e.target.value);
+                                      setFormData({...formData, customerId: e.target.value, eventAddress: customer?.address || ''});
+                                  }}>
+                                      <option value="">Selecione um cliente...</option>
+                                      {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                   </select>
-                              </div>
-                              <button 
-                                  type="button" 
-                                  onClick={() => setIsAddingCustomer(true)} 
-                                  className="w-full bg-gradient-to-br from-green-400 to-green-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] transition-all"
-                              >
-                                  <UserPlus size={16} /> Cadastrar Novo Cliente
-                              </button>
-                          </div>
-                      ) : (
-                          <div className="space-y-4">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                  <div className="space-y-1">
-                                      <label className="text-[9px] font-black text-blue-400 uppercase tracking-widest ml-1">Nome Completo *</label>
-                                      <input type="text" className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={newCustomerData.name} onChange={e => setNewCustomerData({...newCustomerData, name: e.target.value})} required />
-                                  </div>
-                                  <div className="space-y-1">
-                                      <label className="text-[9px] font-black text-blue-400 uppercase tracking-widest ml-1">Telefone *</label>
-                                      <input type="tel" className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={newCustomerData.phone} onChange={e => setNewCustomerData({...newCustomerData, phone: e.target.value})} required />
-                                  </div>
-                              </div>
-
-                              <div className="flex items-center gap-3 bg-white/50 p-4 rounded-2xl">
-                                  <input 
-                                      type="checkbox" 
-                                      id="isCompany" 
-                                      checked={newCustomerData.isCompany} 
-                                      onChange={e => setNewCustomerData({...newCustomerData, isCompany: e.target.checked})} 
-                                      className="w-5 h-5 rounded-lg"
-                                  />
-                                  <label htmlFor="isCompany" className="font-black text-sm text-blue-700 uppercase tracking-widest cursor-pointer flex items-center gap-2">
-                                      <Building2 size={16} /> É uma empresa?
-                                  </label>
-                              </div>
-
-                              {newCustomerData.isCompany && (
-                                  <div className="space-y-1">
-                                      <label className="text-[9px] font-black text-blue-400 uppercase tracking-widest ml-1">CNPJ</label>
-                                      <input type="text" className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={newCustomerData.cnpj} onChange={e => setNewCustomerData({...newCustomerData, cnpj: e.target.value})} />
-                                  </div>
-                              )}
-
-                              {!newCustomerData.isCompany && (
-                                  <div className="space-y-1">
-                                      <label className="text-[9px] font-black text-blue-400 uppercase tracking-widest ml-1">CPF</label>
-                                      <input type="text" className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={newCustomerData.cpf} onChange={e => setNewCustomerData({...newCustomerData, cpf: e.target.value})} />
-                                  </div>
-                              )}
-
-                              <div className="space-y-1">
-                                  <label className="text-[9px] font-black text-blue-400 uppercase tracking-widest ml-1">Endereço</label>
-                                  <input type="text" className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={newCustomerData.address} onChange={e => setNewCustomerData({...newCustomerData, address: e.target.value})} />
-                              </div>
-
-                              <div className="space-y-1">
-                                  <label className="text-[9px] font-black text-blue-400 uppercase tracking-widest ml-1">Observações</label>
-                                  <textarea className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none resize-none" rows={2} value={newCustomerData.notes} onChange={e => setNewCustomerData({...newCustomerData, notes: e.target.value})} />
-                              </div>
-
-                              <div className="flex gap-3">
                                   <button 
                                       type="button" 
-                                      onClick={handleAddCustomer} 
-                                      className="flex-1 bg-gradient-to-br from-green-400 to-green-600 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg hover:scale-[1.02] transition-all"
+                                      onClick={() => setIsAddingCustomer(true)}
+                                      className="px-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 transition-all flex items-center gap-2"
+                                      title="Novo Cliente"
+                                  >
+                                      <UserPlus size={18} />
+                                  </button>
+                              </div>
+                          ) : (
+                              <div className="p-4 bg-slate-50 rounded-2xl space-y-4">
+                                  <div className="flex items-center justify-between">
+                                      <h4 className="font-black text-sm text-blue-700 uppercase tracking-widest">Novo Cliente</h4>
+                                      <button 
+                                          type="button" 
+                                          onClick={() => {
+                                              setIsAddingCustomer(false);
+                                              setNewCustomerData({ name: '', phone: '', address: '', isCompany: false, cnpj: '', cpf: '', notes: '' });
+                                          }}
+                                          className="text-slate-400 hover:text-slate-800 transition-all"
+                                      >
+                                          <X size={20} />
+                                      </button>
+                                  </div>
+
+                                  <div className="flex items-center gap-4 p-3 bg-white rounded-2xl">
+                                      <label className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl cursor-pointer font-black text-[9px] uppercase tracking-widest transition-all ${!newCustomerData.isCompany ? 'bg-blue-50 text-blue-600' : 'text-slate-400'}`}>
+                                          <input type="radio" className="hidden" checked={!newCustomerData.isCompany} onChange={()=>setNewCustomerData({...newCustomerData, isCompany: false})} /> 
+                                          <Users size={14} /> PF
+                                      </label>
+                                      <label className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl cursor-pointer font-black text-[9px] uppercase tracking-widest transition-all ${newCustomerData.isCompany ? 'bg-blue-50 text-blue-600' : 'text-slate-400'}`}>
+                                          <input type="radio" className="hidden" checked={newCustomerData.isCompany} onChange={()=>setNewCustomerData({...newCustomerData, isCompany: true})} /> 
+                                          <Building2 size={14} /> PJ
+                                      </label>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-3">
+                                      <div className="col-span-2">
+                                          <input required placeholder="Nome / Razão Social" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl font-bold text-sm" value={newCustomerData.name} onChange={e=>setNewCustomerData({...newCustomerData, name: e.target.value})} />
+                                      </div>
+
+                                      <input required placeholder="WhatsApp" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl font-bold text-sm" value={newCustomerData.phone} onChange={e=>setNewCustomerData({...newCustomerData, phone: e.target.value})} />
+
+                                      {newCustomerData.isCompany ? (
+                                          <input placeholder="CNPJ" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl font-bold text-sm" value={newCustomerData.cnpj} onChange={e=>setNewCustomerData({...newCustomerData, cnpj: e.target.value})} />
+                                      ) : (
+                                          <input placeholder="CPF" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl font-bold text-sm" value={newCustomerData.cpf} onChange={e=>setNewCustomerData({...newCustomerData, cpf: e.target.value})} />
+                                      )}
+
+                                      <div className="col-span-2">
+                                          <input required placeholder="Endereço" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl font-bold text-sm" value={newCustomerData.address} onChange={e=>setNewCustomerData({...newCustomerData, address: e.target.value})} />
+                                      </div>
+                                  </div>
+
+                                  <button 
+                                      type="button"
+                                      onClick={handleAddNewCustomer}
+                                      className="w-full bg-emerald-600 text-white py-3 rounded-xl font-black uppercase tracking-widest hover:bg-emerald-700 transition-all text-xs"
                                   >
                                       ✓ Salvar Cliente
                                   </button>
-                                  <button 
-                                      type="button" 
-                                      onClick={() => setIsAddingCustomer(false)} 
-                                      className="flex-1 bg-slate-200 text-slate-700 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-300 transition-all"
-                                  >
-                                      Cancelar
-                                  </button>
                               </div>
-                          </div>
-                      )}
-                  </div>
-
-                  <div className="bg-gradient-to-br from-orange-50 to-red-50 p-6 rounded-3xl border-2 border-orange-100 space-y-4">
-                      <div className="flex items-center gap-2 text-orange-700">
-                          <CalendarIcon size={20} />
-                          <h3 className="font-black text-sm uppercase tracking-widest">Data e Horário do Evento</h3>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="space-y-1">
-                              <label className="text-[9px] font-black text-orange-400 uppercase tracking-widest ml-1">Data do Evento</label>
-                              <input type="date" className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-orange-500/20 outline-none" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required />
-                          </div>
-                          <div className="space-y-1">
-                              <label className="text-[9px] font-black text-orange-400 uppercase tracking-widest ml-1">Horário Início</label>
-                              <input type="time" className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-orange-500/20 outline-none" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} required />
-                          </div>
-                          <div className="space-y-1">
-                              <label className="text-[9px] font-black text-orange-400 uppercase tracking-widest ml-1">Horário Término</label>
-                              <input type="time" className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-orange-500/20 outline-none" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} required />
-                          </div>
+                          )}
                       </div>
 
                       <div className="space-y-1">
-                          <label className="text-[9px] font-black text-orange-400 uppercase tracking-widest ml-1">Local do Evento</label>
-                          <input type="text" className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-orange-500/20 outline-none" value={formData.eventAddress} onChange={e => setFormData({...formData, eventAddress: e.target.value})} placeholder="Endereço completo..." />
-                      </div>
-
-                      <div className="space-y-1">
-                          <label className="text-[9px] font-black text-orange-400 uppercase tracking-widest ml-1">Status da Reserva</label>
-                          <select className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-orange-500/20 outline-none" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as RentalStatus})}>
-                              <option value={RentalStatus.PENDING}>Pendente</option>
-                              <option value={RentalStatus.CONFIRMED}>Confirmada</option>
-                              <option value={RentalStatus.COMPLETED}>Concluída</option>
-                              <option value={RentalStatus.CANCELLED}>Cancelada</option>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Status da Reserva</label>
+                          <select className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as RentalStatus})}>
+                              {Object.values(RentalStatus).map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
                       </div>
 
                       <div className="space-y-1">
-                          <label className="text-[9px] font-black text-orange-400 uppercase tracking-widest ml-1">Observações Gerais</label>
-                          <textarea className="w-full px-6 py-4 bg-white rounded-2xl font-bold border-0 focus:ring-2 focus:ring-orange-500/20 outline-none resize-none" rows={3} value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Informações adicionais..." />
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Data do Evento</label>
+                          <input type="date" required className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Início</label>
+                              <input type="time" required className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} />
+                          </div>
+                          <div className="space-y-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Término</label>
+                              <input type="time" required className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.endTime} onChange={e => setFormData({...formData, endTime: e.target.value})} />
+                          </div>
+                      </div>
+
+                      <div className="md:col-span-2 space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Endereço do Evento</label>
+                          <input type="text" className="w-full px-6 py-4 bg-slate-50 rounded-2xl font-bold border-0 focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.eventAddress} onChange={e => setFormData({...formData, eventAddress: e.target.value})} placeholder="Local onde será realizado o evento" />
                       </div>
                   </div>
 
-                  <div className="bg-gradient-to-br from-pink-50 to-purple-50 p-6 rounded-3xl border-2 border-pink-100 space-y-4">
+                  <div className="space-y-4">
                       <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-pink-700">
-                              <BarChart3 size={20} />
-                              <h3 className="font-black text-sm uppercase tracking-widest">Selecione os Brinquedos</h3>
-                          </div>
-                          <div className="flex gap-2">
-                              {categories.map(cat => (
-                                  <button
-                                      key={cat}
-                                      type="button"
-                                      onClick={() => setSelectedCategory(cat)}
-                                      className={`px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${
-                                          selectedCategory === cat 
-                                              ? 'bg-gradient-to-br from-pink-500 to-purple-600 text-white shadow-lg' 
-                                              : 'bg-white text-pink-700 hover:bg-pink-50'
-                                      }`}
-                                  >
-                                      {cat}
-                                  </button>
-                              ))}
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Brinquedos e Atrações</label>
+                          
+                          <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-2xl">
+                              <Filter size={14} className="text-slate-400" />
+                              <select 
+                                  className="bg-transparent border-0 font-bold text-xs uppercase text-slate-600 outline-none cursor-pointer"
+                                  value={selectedCategory}
+                                  onChange={e => setSelectedCategory(e.target.value)}
+                              >
+                                  {categories.map(cat => (
+                                      <option key={cat} value={cat}>{cat}</option>
+                                  ))}
+                              </select>
                           </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[400px] overflow-y-auto pr-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto p-4 bg-slate-50 rounded-3xl">
                           {filteredToys.length === 0 ? (
-                              <div className="col-span-full text-center py-8 text-slate-400">
-                                  <p className="font-bold">Nenhum brinquedo disponível nesta categoria</p>
+                              <div className="col-span-full text-center py-10 text-slate-400 font-bold">
+                                  Nenhum brinquedo nesta categoria
                               </div>
                           ) : (
                               filteredToys.map(toy => {
                                   const isSelected = formData.toyIds?.includes(toy.id);
                                   const quantity = toyQuantities[toy.id] || 1;
-                                  const currentPrice = toyCustomPrices[toy.id] !== undefined ? toyCustomPrices[toy.id] : toy.price;
+                                  const customPrice = toyCustomPrices[toy.id];
+                                  const currentPrice = customPrice !== undefined ? customPrice : toy.price;
                                   
                                   return (
-                                      <div 
-                                          key={toy.id} 
-                                          onClick={() => toggleToySelection(toy.id)}
-                                          className={`relative rounded-2xl p-4 cursor-pointer transition-all ${
-                                              isSelected 
-                                                  ? 'bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-xl scale-105' 
-                                                  : 'bg-white text-slate-700 hover:bg-slate-50 shadow-sm'
-                                          }`}
-                                      >
-                                          {toy.imageUrl && (
-                                              <img src={toy.imageUrl} alt={toy.name} className="w-full h-32 object-cover rounded-xl mb-3" />
-                                          )}
-                                          <h4 className={`font-black text-sm mb-2 ${isSelected ? 'text-white' : 'text-slate-800'}`}>{toy.name}</h4>
-                                          <p className={`text-xs mb-2 ${isSelected ? 'opacity-90' : 'text-slate-500'}`}>{toy.category}</p>
-                                          <p className={`text-lg font-black ${isSelected ? 'text-white' : 'text-blue-600'}`}>
-                                              R$ {toy.price.toFixed(2)}
-                                          </p>
-                                          <p className={`text-[10px] font-bold mt-1 ${isSelected ? 'opacity-80' : 'text-slate-400'}`}>
-                                              Disponível: {toy.quantity}
-                                          </p>
+                                      <div key={toy.id} className={`rounded-3xl overflow-hidden transition-all ${isSelected ? 'bg-blue-600 border-2 border-blue-600' : 'bg-white border-2 border-slate-200 hover:border-blue-300'}`}>
+                                          <label className="flex items-start gap-3 p-4 cursor-pointer">
+                                              <input 
+                                                  type="checkbox" 
+                                                  className="mt-1"
+                                                  checked={isSelected}
+                                                  onChange={() => {
+                                                      if (isSelected) {
+                                                          setFormData({...formData, toyIds: formData.toyIds?.filter(id => id !== toy.id)});
+                                                          const newQtys = {...toyQuantities};
+                                                          delete newQtys[toy.id];
+                                                          setToyQuantities(newQtys);
+                                                          const newPrices = {...toyCustomPrices};
+                                                          delete newPrices[toy.id];
+                                                          setToyCustomPrices(newPrices);
+                                                      } else {
+                                                          setFormData({...formData, toyIds: [...(formData.toyIds || []), toy.id]});
+                                                          setToyQuantities({...toyQuantities, [toy.id]: 1});
+                                                      }
+                                                  }}
+                                              />
+                                              
+                                              {toy.imageUrl && (
+                                                  <div className="w-12 h-12 rounded-2xl overflow-hidden flex-shrink-0 bg-slate-100">
+                                                      <img src={toy.imageUrl} alt={toy.name} className="w-full h-full object-cover" />
+                                                  </div>
+                                              )}
+                                              
+                                              <div className="flex-1">
+                                                  <p className={'font-black text-sm mb-1 ' + (isSelected ? 'text-white' : 'text-slate-800')}>{toy.name}</p>
+                                                  <p className={'text-xs ' + (isSelected ? 'text-blue-100' : 'text-slate-400')}>{toy.size || 'Padrão'}</p>
+                                                  <p className={'text-sm font-black mt-1 ' + (isSelected ? 'text-white' : 'text-slate-700')}>R$ {toy.price.toFixed(2)}</p>
+                                              </div>
+                                          </label>
                                           
                                           {isSelected && (
-                                              <div className="mt-4 space-y-3 border-t border-white/20 pt-4" onClick={(e) => e.stopPropagation()}>
-                                                  {/* Controle de Quantidade */}
-                                                  <div className="flex items-center justify-between gap-2">
+                                              <div className="px-4 pb-4 space-y-3 border-t border-blue-500/20 pt-3">
+                                                  {/* Quantidade */}
+                                                  <div className="flex items-center justify-between gap-3">
                                                       <span className="text-xs font-bold text-white opacity-80">Qtd:</span>
                                                       <div className="flex items-center gap-2">
                                                           <button
