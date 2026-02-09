@@ -24,7 +24,6 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
   const [searchTerm, setSearchTerm] = useState('');
   const [startDateFilter, setStartDateFilter] = useState('');
   const [endDateFilter, setEndDateFilter] = useState('');
-  const [displayMode, setDisplayMode] = useState<'list' | 'grid'>('list');
 
   const userStr = localStorage.getItem('susu_user');
   const user: User | null = userStr ? JSON.parse(userStr) : null;
@@ -567,24 +566,6 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
                   </button>
               ))}
           </div>
-          
-          {/* Botão Toggle de Visualização */}
-          <div className="flex gap-2 bg-white p-2 rounded-3xl border shadow-sm">
-              <button 
-                  onClick={() => setDisplayMode('list')} 
-                  className={'px-6 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ' + (displayMode === 'list' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600')}
-              >
-                  <List size={16} className="inline mr-2" />
-                  Lista
-              </button>
-              <button 
-                  onClick={() => setDisplayMode('grid')} 
-                  className={'px-6 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ' + (displayMode === 'grid' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600')}
-              >
-                  <CalendarDays size={16} className="inline mr-2" />
-                  Grid Compacto
-              </button>
-          </div>
 
           {viewTab !== 'Lista' && (
               <div className="flex items-center gap-4 bg-white p-3 rounded-3xl border shadow-sm">
@@ -597,9 +578,7 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
           )}
       </div>
 
-      {displayMode === 'list' ? (
-        // VISUALIZAÇÃO EM LISTA (ORIGINAL)
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredRentals.length === 0 ? (
               <div className="col-span-full text-center py-20">
                   <CalendarDays size={64} className="mx-auto text-slate-200 mb-4" />
@@ -697,107 +676,6 @@ const Rentals: React.FC<RentalsProps> = ({ rentals, setRentals, customers, setCu
               })
           )}
       </div>
-      ) : (
-        // VISUALIZAÇÃO EM GRID COMPACTO
-        <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
-          {filteredRentals.length === 0 ? (
-              <div className="text-center py-20">
-                  <CalendarDays size={64} className="mx-auto text-slate-200 mb-4" />
-                  <p className="text-slate-400 font-bold text-lg">Nenhum evento encontrado.</p>
-                  <p className="text-slate-400 text-sm mt-2">Ajuste os filtros ou busca para ver mais resultados.</p>
-              </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
-              {filteredRentals.map(rental => {
-                  const rentalToys = toys.filter(t => rental.toyIds.includes(t.id));
-                  const pending = rental.totalValue - rental.entryValue;
-
-                  return (
-                      <div 
-                        key={rental.id} 
-                        className={'border-r border-b hover:bg-slate-50 transition-all cursor-pointer group relative ' + (
-                          rental.status === RentalStatus.COMPLETED ? 'bg-emerald-50/30' :
-                          rental.status === RentalStatus.CONFIRMED ? 'bg-blue-50/30' :
-                          rental.status === RentalStatus.PENDING ? 'bg-yellow-50/30' :
-                          'bg-red-50/30'
-                        )}
-                      >
-                        <div className="p-3 space-y-2">
-                          {/* Status Badge */}
-                          <div className={'inline-block px-2 py-1 rounded-lg text-[8px] font-black uppercase ' + (
-                            rental.status === RentalStatus.COMPLETED ? 'bg-emerald-100 text-emerald-700' :
-                            rental.status === RentalStatus.CONFIRMED ? 'bg-blue-100 text-blue-700' :
-                            rental.status === RentalStatus.PENDING ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-red-100 text-red-700'
-                          )}>
-                            {rental.status}
-                          </div>
-                          
-                          {/* Data */}
-                          <div className="space-y-0.5">
-                            <p className="text-[9px] font-black text-slate-400 uppercase">Data</p>
-                            <p className="text-xs font-bold text-slate-800">
-                              {new Date(rental.date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                            </p>
-                          </div>
-                          
-                          {/* Horário */}
-                          <div className="space-y-0.5">
-                            <p className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1">
-                              <Clock size={8}/> Horário
-                            </p>
-                            <p className="text-[10px] font-bold text-slate-800">
-                              {rental.startTime}
-                            </p>
-                            <p className="text-[10px] font-bold text-slate-600">
-                              {rental.endTime}
-                            </p>
-                          </div>
-                          
-                          {/* Cliente */}
-                          <div className="space-y-0.5">
-                            <p className="text-[9px] font-black text-slate-400 uppercase">Cliente</p>
-                            <p className="text-xs font-bold text-slate-800 truncate" title={rental.customerName}>
-                              {rental.customerName}
-                            </p>
-                          </div>
-                          
-                          {/* Valor */}
-                          <div className="space-y-0.5 pt-2 border-t">
-                            <p className="text-[9px] font-black text-slate-400 uppercase">Total</p>
-                            <p className="text-sm font-black text-slate-900">
-                              R$ {rental.totalValue.toLocaleString('pt-BR')}
-                            </p>
-                            {pending > 0 && (
-                              <p className="text-[10px] font-bold text-yellow-600">
-                                Pendente: R$ {pending.toLocaleString('pt-BR')}
-                              </p>
-                            )}
-                          </div>
-                          
-                          {/* Botões de Ação - aparecem no hover */}
-                          <div className="opacity-0 group-hover:opacity-100 transition-opacity pt-2 space-y-1">
-                            <button 
-                              onClick={() => handleOpenModal(rental)} 
-                              className="w-full bg-blue-500 text-white py-1.5 px-2 rounded-lg font-bold text-[9px] uppercase hover:bg-blue-600 transition-all flex items-center justify-center gap-1"
-                            >
-                              <Edit3 size={10}/> Editar
-                            </button>
-                            <button 
-                              onClick={() => handleSendWhatsApp(rental)} 
-                              className="w-full bg-green-500 text-white py-1.5 px-2 rounded-lg font-bold text-[9px] uppercase hover:bg-green-600 transition-all flex items-center justify-center gap-1"
-                            >
-                              <MessageCircle size={10}/> WhatsApp
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                  );
-              })}
-            </div>
-          )}
-        </div>
-      )}
 
       {isModalOpen && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 overflow-y-auto">
